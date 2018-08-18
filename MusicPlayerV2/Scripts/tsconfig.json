@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+
+    "outFile": "../wwwroot/scripts/main.js",
+    "noImplicitAny": true,
+    "strict": true,
+    "strictNullChecks": false,
+    "noEmitOnError": true,
+    "removeComments": false,
+    "sourceMap": false,
+    "module": "amd",
+    "target": "es5",
+    "lib": [ "dom", "es2015", "es2015.promise" ],
+    "moduleResolution": "node"
+  },
+  "exclude": [
+    "node_modules",
+    "wwwroot"
+  ]
+}

@@ -1,0 +1,1845 @@
+// only necessary for typescript to recognize Vue
+import Vue from 'vue';
+
+const TEST: boolean = false;
+
+console.clear();
+
+Vue.config.errorHandler = (err) => {
+    console.error("Vue compilation error: " + err.name + ": " + err.message);
+}
+
+Vue.component("loading", {
+    template: $(".templates .loader").html()
+});
+
+Vue.directive("perfectscrollbar", {
+    bind: (el: HTMLElement, binding: any, vnode: any) => {
+        $(el).perfectScrollbar();
+        $(el).perfectScrollbar('update');
+    }
+});
+
+/**
+ *  Background image binding, fade in element and fadeout -> fade in when image changes
+ */
+Vue.directive("backgroundimage", {
+    bind: (el: HTMLElement, binding: any, vnode: any) => {
+        //console.log("bind " + binding.oldValue + " -> " + binding.value);
+        if (typeof (binding.value) !== "undefined") {
+            $(el).css("visibility", "hidden");
+            $('<img/>').attr('src', binding.value).on('load', function () {
+                $(el).hide().css("visibility", "visible");
+                el.style.backgroundImage = "url('" + binding.value + "')";
+                $(el).fadeIn(200, function () {
+
+                });
+            }).on('error', function () {
+                $(el).css("visibility", "visible");
+                el.style.backgroundImage = '';
+            });
+        }
+        else
+            el.style.backgroundImage = null;
+    },
+    update: (el: HTMLElement, binding: any, vnode: any, oldVnode: any) => {
+        //console.log("update " + binding.oldValue + " -> " + binding.value);
+
+        if (binding.oldValue != binding.value) {
+            $('<img/>').attr('src', binding.value).on('load', function () {
+                $(this).remove(); // prevent memory leaks as @benweet suggested
+
+                $(el).fadeOut(200, function () {
+                    $(el).css("background-image", "url('" + binding.value + "')");
+                    $(el).fadeIn(200);
+                });
+            }).on('error', function () {
+                $(el).css("visibility", "visible");
+                el.style.backgroundImage = '';
+            });
+
+        }
+    }
+});
+
+
+namespace Domain {
+    export interface IPlayerState {
+        currentTrack: ITrack;
+        shuffle: boolean;
+    }
+
+    export interface ITrack {
+        id: string;
+        title: string;
+        artists: string[];
+        album: string;
+        track: number;
+        artImage: string;
+        liked: LikeStatus;
+        url: string;
+    }
+    export enum LikeStatus {
+        None = 0,
+        Liked = 1,
+        Disliked = 2
+    }
+
+    export interface IPlaylist {
+        id: string;
+        name: string;
+        isCurrent: false;
+        nrOfTracks: number;
+    }
+
+    export interface IPlaylistForAddingItem extends IPlaylist {
+        alreadyOnPlaylistCount: number;
+        forItemSize: number;
+    }
+
+    export interface ITrackDetails {
+        id: string;
+        title: string;
+        artists: string[];
+        album: string;
+        trackNr: number;
+        genres: string[];
+        nrPlayed: number;
+        nrPlayedToEnd: number;
+        lastPlayed: Date | null;
+        addedOn: Date | null;
+        liked: LikeStatus;
+
+        lastScrobbles: ITrackScrobble[];
+    }
+
+    export interface ITrackScrobble {
+        on: Date;
+        playedToEnd: boolean;
+    }
+
+    export interface ITrackItem {
+        id: string;
+        name: string;
+        artists: string;
+        artImage: string;
+    }
+
+    export interface IAlbumOrTrackItem extends ITrackItem, IItem {
+
+    }
+
+    export interface IItem {
+        id: string;
+        name: string;
+        isTrack: boolean;
+    }
+
+    export class Manager {
+
+
+        async getCurrentPlayerState(): Promise<IPlayerState> {
+            let playerResult = await this.get<APIMessages.GetPlayerStateResult>("/api/player/GetCurrentPlayerState");
+            return playerResult.player;
+        }
+
+        async getCurrentTrackId() {
+            let result = await this.get<APIMessages.GetCurrentTrackIdResult>("/api/player/GetCurrentTrackId");
+            return result.trackId;
+        }
+
+        async previousTrack(currentTrackId: string): Promise<IPlayerState> {
+            let playerResult = await this.post<APIMessages.PreviousTrackResult>("/api/player/PreviousTrack",
+                <APIMessages.PreviousTrackRequest>{
+                    currentTrackId: currentTrackId,
+                });
+            return playerResult.player;
+        }
+
+        async nextTrack(currentTrackId: string, playedToEnd: boolean): Promise<IPlayerState> {
+            let playerResult = await this.post<APIMessages.NextTrackResult>("/api/player/NextTrack",
+                <APIMessages.NextTrackRequest>{
+                    currentTrackId: currentTrackId,
+                    playedToEnd: playedToEnd
+                });
+            return playerResult.player;
+        }
+
+        async toggleShuffle(shuffle: boolean) {
+            let playerResult = await this.post<APIMessages.GetPlayerStateResult>("/api/player/ToggleShuffle",
+                <APIMessages.ToggleShuffleRequest>{
+                    shuffle: shuffle
+                });
+            return playerResult.player;
+        }
+
+        async setLikeStatus(trackId: string, status: LikeStatus) {
+            let playerResult = await this.post<APIMessages.SetLikeStatusRequestResult>("/api/player/SetLikeStatus",
+                <APIMessages.SetLikeStatusRequest>{
+                    trackId: trackId,
+                    likeStatus: status
+                });
+            return playerResult.player;
+        }
+
+        async updatePlayerPlayingStatus(trackId: string, isPlaying: boolean) {
+            await this.post<APIMessages.Result>("/api/player/UpdatePlayerPlayingStatus",
+                <APIMessages.UpdatePlayerPlayingStatusRequest>{
+                    trackId: trackId,
+                    isPlaying: isPlaying
+                });
+        }
+
+        async getPlaylists(asSelector: boolean = false, forItem: IItem | null = null): Promise<IPlaylist[]> {
+            let playlistsResult = await this.get<APIMessages.GetPlaylistsResult>("/api/playlist/GetPlaylists",
+                <APIMessages.GetPlaylistsRequest>{
+                    asSelector: asSelector,
+                    forItemId: forItem == null ? undefined : forItem.id,
+                    forItemIsTrack: forItem == null ? undefined : forItem.isTrack
+                });
+            return playlistsResult.playlists;
+        }
+
+        async getAlbumsOrTracks(filter: string, sortBy: string, forPlaylistId?: string, offset: number = 0, size: number = Number.MAX_VALUE): Promise<APIMessages.GetTracksResult> {
+            let albumsOrTrackResult = await this.get<APIMessages.GetAlbumsOrTracksResult>("/api/playlist/GetAlbumsOrTracks",
+                <APIMessages.GetAlbumsOrTracksRequest>{
+                    filter: filter,
+                    sortBy: sortBy,
+                    forPlaylistId: forPlaylistId,
+                    offset: offset,
+                    size: size
+                });
+            return albumsOrTrackResult;
+        }
+
+        async getTracks(filter: string, albumId: string, forPlaylistId?: string, offset: number = 0, size: number = Number.MAX_VALUE): Promise<APIMessages.GetTracksResult> {
+            let result = await this.get<APIMessages.GetTracksResult>("/api/playlist/GetTracks",
+                <APIMessages.GetTracksRequest>{
+                    filter: filter,
+                    albumId: albumId,
+                    forPlaylistId: forPlaylistId,
+                    offset: offset,
+                    size: size
+                });
+            return result;
+        }
+
+        async addPlaylist(playlist: IPlaylist) {
+            let result = await this.post<APIMessages.Result>("/api/playlist/AddPlaylist",
+                <APIMessages.RemovePlaylistRequest>{
+                    playlist: playlist
+                });
+        }
+
+        async removePlaylist(playlist: IPlaylist) {
+            let result = await this.post<APIMessages.Result>("/api/playlist/RemovePlaylist",
+                <APIMessages.RemovePlaylistRequest>{
+                    playlist: playlist
+                });
+        }
+
+        async addToPlaylist(item: IItem, playlistId: string) {
+            let result = await this.post<APIMessages.Result>("/api/playlist/AddToPlaylist",
+                <APIMessages.AddToPlaylistRequest>{
+                    item: item,
+                    playlistId: playlistId
+                });
+        }
+
+        async removeFromPlaylist(item: IItem, playlistId: string | undefined) {
+            let result = await this.post<APIMessages.Result>("/api/playlist/RemoveFromPlaylist",
+                <APIMessages.AddToPlaylistRequest>{
+                    item: item,
+                    playlistId: playlistId
+                });
+        }
+
+        async playAlbumOrTrackAfterCurrentTrack(item: IItem, playlistId?: string) {
+            let result = await this.post<APIMessages.Result>("/api/player/PlayAlbumOrTrackAfterCurrentTrack",
+                <APIMessages.PlayAlbumOrTrackRequest>{
+                    item: item,
+                    playlistId: playlistId
+                });
+        }
+
+        async playAlbumOrTrackNow(item: IItem, playlistId?: string): Promise<IPlayerState> {
+            let result = await this.post<APIMessages.GetPlayerStateResult>("/api/player/PlayAlbumOrTrackNow",
+                <APIMessages.PlayAlbumOrTrackRequest>{
+                    item: item,
+                    playlistId: playlistId
+                });
+            return result.player;
+        }
+
+        async playPlaylistAfterCurrentTrack(playlistId: string) {
+            let result = await this.post<APIMessages.Result>("/api/player/PlayPlaylistAfterCurrentTrack",
+                <APIMessages.PlayPlaylistRequest>{
+                    playlistId: playlistId
+                });
+        }
+
+        async playPlaylistNow(playlistId: string): Promise<IPlayerState> {
+            let result = await this.post<APIMessages.GetPlayerStateResult>("/api/player/PlayPlaylistNow",
+                <APIMessages.PlayPlaylistRequest>{
+                    playlistId: playlistId
+                });
+            return result.player;
+        }
+
+
+        async getDetails(trackId: string): Promise<ITrackDetails> {
+            let result = await this.get<APIMessages.GetDetailsResult>("/api/player/GetDetails",
+                <APIMessages.GetDetailsRequest>{
+                    trackId: trackId
+                });
+            return result.details;
+        }
+
+        private async get<T extends APIMessages.Result>(path: string, data?: any): Promise<T> {
+            // do ajax fetch here, dummy data is done now
+            return new Promise<T>((then, reject) => {
+                if (TEST) {
+                    DummyBackend.get(then, reject, path, data);
+                    return;
+                }
+                $.ajax(path, {
+                    cache: false,
+                    method: "GET",
+                    data: data,
+                    success: (data: APIMessages.Result) => {
+                        if (data == null || typeof (data) === "undefined")
+                            reject("No content");
+
+                        if (data.success)
+                            then(<T>data);
+                        else
+                            reject(data.message);
+                    },
+                    error: (e) => {
+                        reject(e.statusText + " - " + e.responseText);
+                    }
+                });
+
+            });
+        }
+
+        private async post<T extends APIMessages.Result>(path: string, data?: any): Promise<T> {
+            // do ajax fetch here, dummy data is done now
+            return new Promise<T>((then, reject) => {
+                if (TEST) {
+                    DummyBackend.get(then, reject, path, data);
+                    return;
+                }
+
+                $.ajax(path, {
+                    cache: false,
+                    method: "POST",
+                    data: JSON.stringify(data),
+                    contentType: "application/json; charset=utf-8",
+                    success: (data: APIMessages.Result) => {
+                        if (data == null || typeof (data) === "undefined")
+                            reject("No content");
+
+                        if (data.success)
+                            then(<T>data);
+                        else
+                            reject(data.message);
+                    },
+                    error: (e) => {
+                        reject(e.statusText + " - " + e.responseText);
+                    }
+                });
+            });
+        }
+    }
+
+    export namespace APIMessages {
+
+        export interface Result {
+            success: boolean;
+            message: string;
+        }
+
+        export interface GetPlayerStateResult extends Result {
+            player: IPlayerState;
+        }
+
+        export interface GetPlaylistsResult extends Result {
+            playlists: IPlaylist[];
+        }
+
+        export interface GetAlbumsOrTracksResult extends Result {
+            items: IAlbumOrTrackItem[];
+            totalCount: number;
+        }
+
+        export interface GetTracksResult extends GetAlbumsOrTracksResult {
+        }
+
+        export interface GetDetailsResult extends Result {
+            details: ITrackDetails;
+        }
+
+
+        export interface PreviousTrackResult extends GetPlayerStateResult {
+
+        }
+
+        export interface NextTrackResult extends GetPlayerStateResult {
+
+        }
+
+        export interface ToggleShuffleResult extends GetPlayerStateResult {
+
+        }
+
+        export interface SetLikeStatusRequestResult extends GetPlayerStateResult {
+
+        }
+
+        export interface PlayNowResult extends GetPlayerStateResult {
+
+        }
+
+        export interface GetCurrentTrackIdResult extends Result {
+            trackId: string;
+        }
+
+
+        export interface Request {
+
+        }
+
+        export interface PreviousTrackRequest extends Request {
+            currentTrackId: string;
+        }
+
+        export interface NextTrackRequest extends Request {
+            currentTrackId: string;
+            playedToEnd: boolean;
+        }
+
+        export interface ToggleShuffleRequest extends Request {
+            shuffle: boolean;
+        }
+
+        export interface SetLikeStatusRequest extends Request {
+            trackId: string;
+            likeStatus: LikeStatus;
+        }
+
+        export interface UpdatePlayerPlayingStatusRequest extends Request {
+            trackId: string;
+            isPlaying: boolean;
+        }
+
+        export interface PlayAlbumOrTrackRequest extends Request {
+            item: IItem;
+            playlistId: string;
+        }
+
+        export interface PlayPlaylistRequest extends Request {
+            playlistId: string;
+        }
+
+        export interface GetDetailsRequest extends Request {
+            trackId: string
+        }
+
+        export interface GetAlbumsOrTracksRequest extends Request {
+            filter: string;
+            sortBy: string;
+            forPlaylistId: string;
+            offset: number;
+            size: number;
+        }
+
+        export interface GetTracksRequest extends Request {
+            filter: string;
+            albumId: string;
+            forPlaylistId: string;
+            offset: number;
+            size: number;
+        }
+
+        export interface GetPlaylistsRequest extends Request {
+            asSelector: boolean;
+            forItemId: string;
+            forItemIsTrack: boolean;
+        }
+
+        export interface AddPlaylistRequest extends Request {
+            playlist: IPlaylist;
+        }
+
+        export interface RemovePlaylistRequest extends Request {
+            playlist: IPlaylist;
+        }
+
+        export interface AddToPlaylistRequest extends Request {
+            item: IItem;
+            playlistId: string;
+        }
+
+        export interface RemoveFromPlaylistRequest extends Request {
+            item: IItem;
+            playlistId: string;
+        }
+
+
+    }
+}
+
+class DummyBackend {
+    private static currentTrack: number = 0;
+
+    private static tracks = [
+        {
+            title: 'This is a test title for testing',
+            artists: [''],
+            album: "Dragonball Z3",
+            trackNr: 1,
+            artImage: "llhttps://i.imgur.com/13MdjPD.png",
+            liked: Domain.LikeStatus.None,
+            url: "http://dwight.skyon.be/arrange.mp3"
+        },
+        {
+            title: 'Another track',
+            artists: ['I have no idea'],
+            album: "Journey",
+            trackNr: 1,
+            artImage: "https://i.imgur.com/eSS7WVW.png",
+            liked: Domain.LikeStatus.None,
+            url: "http://dwight.skyon.be/arrange.mp3"
+        }
+    ];
+
+    static get<T>(then: (obj: T) => void, reject: (reason: any) => void, path: string, data?: any) {
+
+        window.setTimeout(() => {
+            if (path == "/api/player/GetCurrentPlayerState") {
+                then(<T><any>{
+                    player: {
+                        shuffle: false,
+                        currentTrack: DummyBackend.tracks[DummyBackend.currentTrack]
+                    }
+                });
+            }
+            else if (path == "/api/player/NextTrack") {
+                DummyBackend.currentTrack = (DummyBackend.currentTrack + 1) % DummyBackend.tracks.length;
+                then(<T><any>{
+                    player: {
+                        shuffle: false,
+                        currentTrack: DummyBackend.tracks[DummyBackend.currentTrack]
+                    }
+                });
+            }
+            else if (path == "/api/playlist/GetPlaylists") {
+                then(<T><any>{
+                    playlists: [
+                        { id: 0, name: "[All]", isCurrent: true, nrOfTracks: 5 },
+                        { id: 1, name: "Chill", isCurrent: false, nrOfTracks: 123 },
+                        { id: 2, name: "Energetic", isCurrent: false, nrOfTracks: 0 },
+                    ]
+                });
+            }
+            else if (path == "/api/playlist/GetAlbumsOrTracks") {
+                let items: Domain.IAlbumOrTrackItem[] = [];
+                for (let i: number = data.offset; i < data.offset + data.size; i++) {
+
+                    if (typeof (data) === "undefined" || data.filter === "" || ("Final Fantasy " + i).indexOf(data.filter) >= 0) {
+                        items.push({
+                            id: i + "",
+                            name: "Final Fantasy " + i,
+                            artists: "Nobuo Uematsu",
+                            isTrack: false,
+                            artImage: "https://i.imgur.com/13MdjPD.png"
+                        });
+                    }
+                }
+                then(<T><any>{
+                    items: items,
+                    totalCount: 2000
+                });
+            }
+            else if (path == "/api/playlist/GetTracks") {
+                let items: Domain.IAlbumOrTrackItem[] = [];
+                for (let i: number = 0; i < 10; i++) {
+                    if (typeof (data) === "undefined" || data.filter === "" || ("Track " + i).indexOf(data.filter) >= 0) {
+                        items.push({
+                            id: i + "",
+                            name: "Track " + i,
+                            artists: "Nobuo Uematsu",
+                            isTrack: true,
+                            artImage: "https://i.imgur.com/13MdjPD.png"
+                        });
+                    }
+                }
+                then(<T><any>{
+                    items: items
+                });
+            }
+            else if (path == "/api/player/GetDetails") {
+                then(<T><any>{
+                    details: {
+                        id: "1234",
+                        title: "Track name",
+                        artists: ["Artist 1", "Artist 2"],
+                        album: "Awesome album",
+                        track: 1,
+                        genres: ["Game", "OST", "Electronic"],
+                        nrPlayed: 2,
+                        nrPlayedToEnd: 1,
+                        lastPlayed: new Date(),
+                        addedOn: new Date(),
+                        liked: Domain.LikeStatus.Liked,
+
+                        lastScrobbles: [
+                            { on: new Date(), playedToEnd: true },
+                            { on: new Date(), playedToEnd: true },
+                            { on: new Date(), playedToEnd: true }
+                        ]
+                    }
+                })
+            }
+            else {
+                reject("Path '" + path + "' not found");
+            }
+        }, 500);
+    }
+}
+
+namespace GUI {
+
+    export class NotificationManager {
+
+        public static showNotification(msg: string, isError: boolean = false, timeout: number = 3000) {
+            let notification = $(`<div class='notification ${isError ? "error" : "info"}'>${msg}</div>`);
+            $(".notifications").append(notification);
+
+            let hideFunc = () => {
+                notification.detach();
+                /*notification.fadeTo(500, 0, () => {
+                    
+                });*/
+            }
+            $(notification).click(function () {
+                hideFunc();
+            })
+            window.setTimeout(() => {
+                hideFunc();
+            }, timeout);
+        }
+    }
+
+    export class PageManager {
+        private pages: Page[] = [];
+
+        constructor() {
+
+        }
+
+        async show(page: Page) {
+
+            var template = page.getTemplate();
+
+            let id = 'page-' + this.pages.length;
+            $(".pages").append(`<div id="${id}">${template}</div>`);
+
+
+            for (let page of this.pages)
+                page.active = false;
+            page.active = true;
+
+            this.pages.push(page);
+
+
+            try {
+                await page.bind(id);
+            } catch (e) {
+                // close the new page, it can't be shown because bind failed
+                this.close();
+
+                throw e;
+            }
+        }
+
+        close() {
+            if (this.pages.length <= 1)
+                return;
+
+            let lastPage = this.pages[this.pages.length - 1];
+            lastPage.active = false;
+            lastPage.close();
+
+            let id = 'page-' + (this.pages.length - 1);
+            $("#" + id).empty().detach();
+            this.pages.pop();
+
+            lastPage = this.pages[this.pages.length - 1];
+            lastPage.active = true;
+        }
+
+        emit(source: Page, eventName: string, data: any) {
+            for (let p of this.pages) {
+                if (p !== source)
+                    p.onevent(source, eventName, data);
+            }
+        }
+    }
+
+
+    abstract class Page {
+
+        protected gui: Vue | null = null;
+        protected pageManager: PageManager;
+        active: boolean = false;
+
+        constructor(pageManager: PageManager) {
+            this.pageManager = pageManager;
+        }
+
+        abstract getTemplate(): string;
+
+        protected getMethods(): any {
+            return {
+                back_click: () => {
+                    this.pageManager.close();
+                }
+            }
+        }
+
+        protected getComputed(): any {
+            return {};
+        }
+
+        abstract async bind(id: string): Promise<void>;
+
+
+        close() {
+            if (this.gui != null)
+                this.gui.$destroy();
+            this.gui = null;
+        }
+
+        onevent(source: Page, eventName: string, data: any) {
+
+        }
+
+        protected bindModel(elementId: string, model: any) {
+            this.gui = new Vue({
+
+                data: {
+                    model: model,
+                    page: this
+                },
+                el: "#" + elementId,
+                methods: this.getMethods(),
+                computed: this.getComputed()
+            });
+        }
+
+        protected rebindModel(model: any) {
+            this.gui!.$data.model = model;
+        }
+    }
+
+    class PlayerViewState {
+
+        howl: Howl | null = null;
+        isPlaying: boolean = false;
+
+        progress: number = 0;
+        currentTime: number = 0;
+        totalTime: number = 0;
+        currentVolume: number = 0.1;
+
+        setHowl(howl: Howl | null) {
+            if (this.howl != null) {
+                // clean up
+                this.howl.off("play");
+                this.howl.off("pause");
+                this.howl.off("stop");
+                this.howl.off("volume");
+                this.howl.off("seek");
+                this.howl.stop();
+                this.howl.unload();
+            }
+            this.howl = howl;
+
+            if (this.howl != null) {
+                this.howl.on("play", () => this.isPlaying = true);
+                this.howl.on("pause", () => this.isPlaying = false);
+                this.howl.on("stop", () => this.isPlaying = false);
+                this.howl.on("volume", () => this.currentVolume = this.howl!.volume());
+                this.howl.on("seek", () => this.synchronizeState());
+            }
+        }
+
+        synchronizeState(): void {
+            if (this.howl != null) {
+                try {
+                    this.isPlaying = this.howl.playing();
+                    this.currentVolume = this.howl.volume();
+                    if (this.howl.playing()) {
+                        this.progress = (<number>this.howl.seek() / this.howl.duration());
+                        this.currentTime = <number>this.howl.seek();
+                        this.totalTime = this.howl.duration();
+                    }
+                } catch (e) {
+                    console.warn("Error updating view state: " + e)
+                };
+            }
+        }
+
+    }
+
+    function updateBackgroundSVG(imgUrl: string) {
+        $('<img/>').attr('src', imgUrl).on('load', function () {
+            $(this).remove();
+            $("#artbackgroundsvg").fadeOut(200, function () {
+                $("#artbackgroundsvg").attr("xlink:href", imgUrl);
+                $("#artbackgroundsvg").fadeIn(200);
+            });
+
+        }).on("error", function () {
+            $("#artbackgroundsvg").fadeOut(200, function () {
+                $("#artbackgroundsvg").attr("xlink:href", '');
+                $("#artbackgroundsvg").fadeIn(200);
+            });
+        })
+
+    }
+
+    export class MainPage extends Page {
+        private manager: Domain.Manager;
+
+        private playerState: Domain.IPlayerState | null = null;
+
+
+        get currentTrack(): Domain.ITrack | null {
+            return this.playerState == null ? null : this.playerState.currentTrack;
+        }
+
+        private loading: boolean = false;
+        private loadingNext: boolean = false;
+        private loadingPrevious: boolean = false;
+
+        private toggleShowVolume: boolean = false;
+
+        private viewState: PlayerViewState = new PlayerViewState();
+        private tmrUpdateProgressId: number;
+        private tmrCheckIfTrackIsStillCurrentId: number;
+
+        constructor(pageManager: PageManager, manager: Domain.Manager) {
+            super(pageManager);
+            this.manager = manager;
+
+            this.tmrUpdateProgressId = window.setInterval(() => this.tmrUpdateProgress_Tick(), 1000);
+            this.tmrCheckIfTrackIsStillCurrentId = window.setTimeout(() => this.tmrCheckIfTrackIsStillCurrent_Tick(), 10000);
+        }
+
+        getTemplate(): string {
+            var template = (<HTMLElement><any>$(".templates .page.main").get(0)).outerHTML;
+            return template;
+        }
+
+        protected getMethods() {
+            var methods = {
+                play_click: async () => {
+                    await this.togglePlayback();
+                },
+
+                stop_click: async () => {
+                    await this.stopPlayback();
+                },
+
+                rewind_click: async () => {
+                    await this.playPrevious();
+                },
+                fastForward_click: async () => {
+                    this.playNext(false);
+                },
+
+                volume_click: () => {
+                    this.toggleShowVolume = !this.toggleShowVolume;
+                },
+
+                volumebar_mouseup: (event: MouseEvent) => {
+                    let percentage = event.offsetX / <number>$(event.currentTarget).width();
+                    if (percentage < 0) percentage = 0;
+                    if (percentage > 1) percentage = 1;
+                    this.viewState.howl!.volume(percentage);
+                },
+
+                progressbar_mouseup: (event: MouseEvent) => {
+                    if (this.viewState.howl != null) {
+                        let percentage = event.offsetX / <number>$(event.currentTarget).width();
+                        if (percentage < 0) percentage = 0;
+                        if (percentage > 1) percentage = 1;
+                        this.viewState.howl.seek(percentage * this.viewState.howl.duration());
+                    }
+                },
+
+                shuffle_click: async () => {
+                    if (this.playerState == null) return;
+
+                    try {
+                        let playerState = await this.manager.toggleShuffle(!this.playerState.shuffle);
+                        this.setPlayerState(playerState, true);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to set toggle shuffle: " + e, true);
+                    }
+                },
+
+                like_click: async () => {
+                    if (this.playerState == null || this.playerState.currentTrack == null) return;
+
+                    try {
+                        if (this.playerState!.currentTrack.liked == Domain.LikeStatus.None) {
+                            let playerState = await this.manager.setLikeStatus(this.playerState.currentTrack.id, Domain.LikeStatus.Liked);
+                            this.setPlayerState(playerState, true);
+                        }
+                        else {
+                            await this.manager.setLikeStatus(this.playerState.currentTrack.id, Domain.LikeStatus.None);
+                            this.playerState!.currentTrack.liked = Domain.LikeStatus.None;
+                        }
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to set like status: " + e, true);
+                    }
+                },
+
+                menu_click: async () => {
+                    if (this.playerState == null) return;
+
+                    try {
+                        var menuPage = new MenuPage(this.pageManager, this.manager, this.playerState);
+                        await this.pageManager.show(menuPage);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to show menu: " + e, true);
+                    }
+                }
+
+            };
+            return jQuery.extend(super.getMethods(), methods);
+        }
+
+
+        private volumeTimerId: number = -1;
+
+        volumeUp() {
+            if (this.viewState.howl == null) return;
+
+            this.toggleShowVolume = true;
+
+            let percentage = this.viewState.howl!.volume();
+            percentage += (percentage < 0.05 ? 0.01 : 0.05);
+
+            if (percentage < 0) percentage = 0;
+            if (percentage > 1) percentage = 1;
+            this.viewState.howl!.volume(percentage);
+
+            if (this.volumeTimerId != -1) window.clearTimeout(this.volumeTimerId);
+            this.volumeTimerId = window.setTimeout(() => {
+                this.toggleShowVolume = false;
+            }, 1000);
+        }
+
+        volumeDown() {
+            if (this.viewState.howl == null) return;
+
+            this.toggleShowVolume = true;
+
+            let percentage = this.viewState.howl!.volume();
+            percentage -= (percentage <= 0.05 ? 0.01 : 0.05);
+
+            if (percentage < 0) percentage = 0;
+            if (percentage > 1) percentage = 1;
+            this.viewState.howl!.volume(percentage);
+
+            if (this.volumeTimerId != -1) window.clearTimeout(this.volumeTimerId);
+            this.volumeTimerId = window.setTimeout(() => {
+                this.toggleShowVolume = false;
+            }, 1000);
+        }
+
+        async playPrevious() {
+            if (this.playerState == null || this.viewState.howl == null) return;
+
+            let wasPlaying = this.viewState.howl!.playing();
+
+            this.loadingPrevious = true;
+            try {
+                let player = await this.manager.previousTrack(this.playerState.currentTrack.id);
+                this.setPlayerState(player, true);
+            }
+            catch (e) {
+                GUI.NotificationManager.showNotification("Error setting previous track: " + e, true);
+            }
+            this.loadingPrevious = false;
+        }
+
+        async togglePlayback() {
+            if (this.playerState == null || this.viewState.howl == null) return;
+
+            if (this.viewState.howl!.playing()) {
+                this.viewState.howl!.pause();
+                try {
+                    await this.manager.updatePlayerPlayingStatus(this.playerState.currentTrack.id, false);
+                }
+                catch (e) {
+                    GUI.NotificationManager.showNotification("Unable to set player playing status: " + e, true);
+                }
+            }
+            else {
+                this.viewState.howl!.play();
+                try {
+                    await this.manager.updatePlayerPlayingStatus(this.playerState.currentTrack.id, true);
+                }
+                catch (e) {
+                    GUI.NotificationManager.showNotification("Unable to set player playing status: " + e, true);
+                }
+            }
+        }
+
+        async stopPlayback() {
+            if (this.playerState == null || this.viewState.howl == null) return;
+
+            let wasPlaying = this.viewState.howl.playing();
+
+            this.viewState.howl.stop();
+            this.viewState.howl.seek(0);
+            this.viewState.currentTime = 0; // synchronizestate only changes this if howl is playing to prevent errors
+            this.viewState.progress = 0;
+
+            if (wasPlaying) {
+                try {
+                    await this.manager.updatePlayerPlayingStatus(this.playerState.currentTrack.id, false);
+                }
+                catch (e) {
+                    GUI.NotificationManager.showNotification("Unable to set player playing status: " + e, true);
+                }
+            }
+        }
+
+        async playNext(playedToEnd: boolean) {
+            if (this.playerState == null || this.viewState.howl == null) return;
+
+            this.loadingNext = true;
+            try {
+
+                let wasPlaying = this.viewState.howl!.playing() || playedToEnd;
+
+                let player = await this.manager.nextTrack(this.playerState.currentTrack.id, playedToEnd);
+                this.setPlayerState(player, false);
+                // continuePlaying will play the next track if the howl was playing, which it wasn't if playedToEnd == true
+
+                // so check manually
+                if (wasPlaying && !this.viewState.howl!.playing()) // if it was playing continue with the next song
+                    this.togglePlayback();
+                else {
+                    this.viewState.howl.seek(0);
+                    this.viewState.currentTime = 0; // synchronizestate only changes this if howl is playing to prevent errors
+                    this.viewState.progress = 0;
+                }
+
+            } catch (e) {
+                GUI.NotificationManager.showNotification("Error setting next track: " + e, true);
+            }
+            this.loadingNext = false;
+        }
+
+        protected getComputed() {
+            return jQuery.extend(super.getComputed(), {
+                formattedCurrentTime: () => {
+                    return MainPage.formatTime(this.viewState.currentTime);
+                },
+
+                formattedTotalTime: () => {
+                    return MainPage.formatTime(this.viewState.totalTime);
+                }
+            });
+        }
+
+        private static formatTime(time: number): string {
+            if (typeof (time) === "undefined" || isNaN(time))
+                return "--:--";
+
+            let seconds = Math.round(time) % 60;
+            let minutes = Math.floor(Math.round(time) / 60);
+
+            return ((minutes + "").length == 1 ? "0" : "") + minutes + ":" +
+                ((seconds + "").length == 1 ? "0" : "") + seconds;
+        }
+
+        async bind(elementId: string) {
+            this.bindModel(elementId, this.playerState);
+            console.log("Loading..");
+            this.loading = true;
+
+            let player = await this.manager.getCurrentPlayerState();
+            this.setPlayerState(player, false);
+
+            console.log("Loading done");
+            this.loading = false;
+        }
+
+        /**
+         * Sets the new player state and initializes a new howl to play it
+         */
+        private setPlayerState(playerState: Domain.IPlayerState, continuePlaying: boolean) {
+
+            let isTrackChanged: boolean = this.isTrackChanged(playerState.currentTrack == null ? null : playerState.currentTrack.id);
+            let wasPlaying = this.viewState.isPlaying;
+
+            this.playerState = playerState;
+            if (isTrackChanged) {
+
+                if (this.playerState.currentTrack == null)
+                    updateBackgroundSVG("");
+                else
+                    updateBackgroundSVG(this.playerState.currentTrack.artImage);
+
+                if (this.viewState.howl != null) {
+                    // clean up old event handlers
+                    this.viewState.howl!.off("loaderror");
+                    this.viewState.howl!.off("load");
+                    this.viewState.howl!.off("end");
+                }
+
+                if (this.playerState.currentTrack == null)
+                    this.viewState.setHowl(null);
+                else
+                    this.viewState.setHowl(new Howl({
+                        src: [this.playerState.currentTrack.url],
+                        html5: true,
+                        volume: this.viewState.currentVolume,
+                        preload: true
+                    }));
+
+                // force track to be loaded so duration is updated
+                //this.viewState.howl!.play();
+                //this.viewState.howl!.stop();
+                if (this.viewState.howl != null) {
+                    this.viewState.howl.on("loaderror", (id: number, error: any) => {
+                        GUI.NotificationManager.showNotification("Error loading track: " + error, true);
+                    });
+                    this.viewState.howl.on("load", () => {
+                        console.log("Track loaded");
+                    });
+                    this.viewState.howl.on("end", () => {
+                        console.log("Finished");
+                        this.playNext(true);
+                    });
+
+
+                    if (continuePlaying) {
+                        if (wasPlaying && !this.viewState.howl.playing()) // if it was playing continue with the next song
+                            this.togglePlayback();
+                        else {
+                            this.viewState.howl.seek(0);
+                            this.viewState.currentTime = 0; // synchronizestate only changes this if howl is playing to prevent errors
+                            this.viewState.progress = 0;
+                        }
+                    }
+                }
+                this.pageManager.emit(this, "CurrentTrackChanged", this.playerState);
+
+            }
+            this.rebindModel(this.playerState);
+        }
+
+        private isTrackChanged(id: string | null) {
+            let isTrackChanged: boolean = this.playerState == null ||
+                (this.playerState.currentTrack == null && id != null) ||
+                (this.playerState.currentTrack != null && id == null) ||
+                (this.playerState.currentTrack != null && id != null &&
+                    this.playerState.currentTrack.id != id);
+            return isTrackChanged;
+        }
+
+        private tmrUpdateProgress_Tick(): void {
+            this.viewState.synchronizeState();
+        }
+
+        private async tmrCheckIfTrackIsStillCurrent_Tick() {
+            try {
+                // don't check during loading, it might be changing anyway
+                if (this.loadingNext || this.loadingPrevious || this.loading)
+                    return;
+
+                let trackId = await this.manager.getCurrentTrackId();
+
+                if (this.isTrackChanged(trackId)) {
+                    console.log("Track was changed on server, updating state");
+                    let player = await this.manager.getCurrentPlayerState();
+                    this.setPlayerState(player, true);
+                }
+            } catch (e) {
+                console.error("Unable to check current track state: " + e);
+            }
+            finally {
+                this.tmrCheckIfTrackIsStillCurrentId = window.setTimeout(() => this.tmrCheckIfTrackIsStillCurrent_Tick(), 10000);
+            }
+        }
+
+        onevent(source: Page, eventName: string, data: any) {
+            if (eventName == "PlayerStateChanged") {
+                this.setPlayerState(data, true);
+            }
+        }
+
+        close() {
+            if (this.viewState.howl != null)
+                this.viewState.howl.stop();
+
+            window.clearInterval(this.tmrUpdateProgressId);
+            window.clearTimeout(this.tmrCheckIfTrackIsStillCurrentId);
+            super.close();
+        }
+    }
+
+
+    class MenuPage extends Page {
+        private manager: Domain.Manager;
+        private currentState: Domain.IPlayerState;
+
+        constructor(pageManager: PageManager, manager: Domain.Manager, currentState: Domain.IPlayerState) {
+            super(pageManager);
+            this.manager = manager;
+            this.currentState = currentState;
+        }
+
+        getTemplate(): string {
+            var template = (<HTMLElement><any>$(".templates .page.menu").get(0)).outerHTML;
+            return template;
+        }
+
+        getMethods() {
+            return jQuery.extend(super.getMethods(), {
+                details_click: async () => {
+                    try {
+                        let detailsPage = new TrackDetailsPage(this.pageManager, this.manager, this.currentState.currentTrack.id);
+                        await this.pageManager.show(detailsPage);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to fetch details: " + e, true);
+                    }
+                },
+                playlists_click: async () => {
+                    try {
+                        let playlistsPage = new PlaylistsPage(this.pageManager, this.manager);
+                        await this.pageManager.show(playlistsPage);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to retrieve playlists: " + e, true);
+                    }
+                },
+                browse_click: async () => {
+                    try {
+                        let browsePage = new BrowsePage(this.pageManager, this.manager);
+                        await this.pageManager.show(browsePage);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to retrieve content: " + e, true);
+                    }
+                },
+                addToPlaylist_click: async () => {
+                    if (this.currentState == null || this.currentState.currentTrack == null) return;
+
+                    let item: Domain.IItem = {
+                        id: this.currentState.currentTrack.id,
+                        name: this.currentState.currentTrack.title,
+                        isTrack: true
+                    };
+
+                    try {
+                        let playlistSelector: AddToPlaylistsSelectorPage = new AddToPlaylistsSelectorPage(this.pageManager, this.manager, item, async () => {
+                            try {
+                                await this.manager.addToPlaylist(item, playlistSelector.selectedId);
+                                NotificationManager.showNotification(`${item.name} added to playlist ${playlistSelector.selectedPlaylist!.name}`);
+                            } catch (e) {
+                                NotificationManager.showNotification(`Unable to add ${item.name} to playlist ${playlistSelector.selectedPlaylist!.name}: ` + e, true);
+                            }
+                        });
+                        await this.pageManager.show(playlistSelector);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to fetch playlists: " + e, true);
+                    }
+                }
+            });
+        }
+
+        async bind(id: string) {
+            var model = null;
+            this.bindModel(id, model);
+        }
+    }
+
+
+    class PlaylistsPage extends Page {
+        protected manager: Domain.Manager;
+
+
+        private loading: boolean = false;
+
+        private playlists: Domain.IPlaylist[] = [];
+
+        selectedId: string = "";
+        public title: string = "Playlists";
+        protected canShowActions: boolean = true;
+
+        constructor(pageManager: PageManager, manager: Domain.Manager) {
+            super(pageManager);
+            this.manager = manager;
+        }
+
+
+        get selectedPlaylist(): Domain.IPlaylist | null {
+            let playlists = this.playlists.filter(p => p.id == this.selectedId);
+            if (playlists.length == 0)
+                return null;
+            else
+                return playlists[0];
+        }
+
+
+        getTemplate(): string {
+            var template = (<HTMLElement><any>$(".templates .page.playlists").get(0)).outerHTML;
+            return template;
+        }
+
+        getMethods() {
+            return jQuery.extend(super.getMethods(), {
+                item_click: (id: string) => {
+                    this.selectedId = (id === this.selectedId) ? "" : id;
+                },
+
+                newPlaylist_click: async () => {
+                    try {
+                        let editPage = new EditPlaylistPage(this.pageManager, this.manager, null, () => {
+                            this.fill();
+                        });
+                        await this.pageManager.show(editPage);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to create new playlist, error: " + e, true);
+                    }
+                },
+
+                showDetails_click: async () => {
+                    let playlist = this.playlists.filter(p => p.id == this.selectedId)[0];
+
+                    try {
+
+                        let browsePage = new BrowsePage(this.pageManager, this.manager, undefined, playlist);
+                        browsePage.title = playlist.name;
+                        await this.pageManager.show(browsePage);
+                        this.selectedId = "";
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to show details, error: " + e, true);
+                    }
+                },
+
+                playNow_click: async () => {
+                    try {
+                        let player: Domain.IPlayerState = await this.manager.playPlaylistNow(this.selectedId);
+                        this.pageManager.emit(this, "PlayerStateChanged", player);
+                        this.selectedId = "";
+
+                        await this.fill();
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to play the playlist now: " + e, true);
+                    }
+                },
+
+                playAfterCurrentTrack_click: async () => {
+                    try {
+                        await this.manager.playPlaylistAfterCurrentTrack(this.selectedId);
+                        NotificationManager.showNotification("Playlist successfully queued");
+                        this.selectedId = "";
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to play the playlist after current track: " + e, true);
+                    }
+                },
+                delete_click: async () => {
+                    if (this.selectedId == "")
+                        return;
+
+                    if (confirm("Are you sure?")) {
+                        try {
+                            await this.manager.removePlaylist(this.playlists.filter(p => p.id == this.selectedId)[0]);
+
+                            this.selectedId = "";
+                            await this.fill();
+                        } catch (e) {
+                            NotificationManager.showNotification("Unable to delete playlist, error: " + e, true);
+                        }
+                    }
+                }
+            });
+        }
+
+        async bind(id: string) {
+
+            this.bindModel(id, this.playlists);
+            await this.fill();
+        }
+
+        private async fill() {
+            this.loading = true;
+            this.playlists.splice(0, this.playlists.length);
+
+            let playlists = await this.fetchPlaylists();
+            for (let i: number = 0; i < playlists.length; i++)
+                this.playlists.push(playlists[i]);
+
+            this.loading = false;
+        }
+
+        protected async fetchPlaylists() {
+            let playlists = await this.manager.getPlaylists();
+            return playlists;
+        }
+
+    }
+
+    class AddToPlaylistsSelectorPage extends PlaylistsPage {
+
+        private onselected: (() => void);
+        private forItem: Domain.IItem;
+        public title: string = "Add to playlist";
+        constructor(pageManager: PageManager, manager: Domain.Manager, forItem: Domain.IItem, onselected: (() => void)) {
+            super(pageManager, manager);
+            this.canShowActions = false;
+            this.onselected = onselected;
+            this.forItem = forItem;
+        }
+
+        getMethods() {
+            return jQuery.extend(super.getMethods(), {
+                item_click: (id: string) => {
+                    this.selectedId = (id === this.selectedId) ? "" : id;
+
+                    if (this.selectedId !== "") { // selection is made
+                        if (this.onselected != null)
+                            this.onselected();
+
+                        this.pageManager.close();
+                    }
+                }
+            });
+        }
+
+        async fetchPlaylists() {
+            let playlists = await this.manager.getPlaylists(true, this.forItem);
+            return playlists;
+        }
+    }
+
+
+    class EditPlaylistPage extends Page {
+        private manager: Domain.Manager;
+
+        private playlist: Domain.IPlaylist;
+
+        private isNew: boolean = false;
+
+        private onclose: (() => void) | null;
+
+        constructor(pageManager: PageManager, manager: Domain.Manager, playlist: Domain.IPlaylist | null = null, onclose: (() => void) | null = null) {
+            super(pageManager);
+            this.manager = manager;
+            this.onclose = onclose;
+            if (playlist == null) {
+                this.playlist = {
+                    id: "",
+                    name: "",
+                    isCurrent: false,
+                    nrOfTracks: 0
+                };
+                this.isNew = true;
+            }
+            else {
+                this.playlist = playlist;
+                this.isNew = false;
+            }
+
+        }
+
+        getTemplate(): string {
+            var template = (<HTMLElement><any>$(".templates .page.edit-playlist").get(0)).outerHTML;
+            return template;
+        }
+
+        private validate(): string[] {
+            if (this.playlist.name == "")
+                return ["Name is required"];
+
+            return [];
+        }
+
+        getMethods() {
+            return jQuery.extend(super.getMethods(), {
+                save_click: async () => {
+                    try {
+                        let validation = this.validate();
+                        if (validation.length > 0) {
+                            NotificationManager.showNotification("Not all fields are valid: <br:>" + validation.join("<br/>"), false);
+                        }
+                        else {
+                            await this.manager.addPlaylist(this.playlist);
+                            this.pageManager.close();
+                        }
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to save: " + e, true);
+                    }
+                }
+            });
+        }
+
+        async bind(id: string) {
+            this.bindModel(id, this.playlist);
+        }
+
+        close() {
+            if (this.onclose != null)
+                this.onclose();
+
+            super.close();
+        }
+    }
+
+
+
+    export class TrackDetailsPage extends Page {
+        private manager: Domain.Manager;
+
+        private trackId: string;
+
+        private loading: boolean = false;
+
+        constructor(pageManager: PageManager, manager: Domain.Manager, trackId: string) {
+            super(pageManager);
+            this.manager = manager;
+            this.trackId = trackId;
+        }
+
+        getTemplate(): string {
+            var template = (<HTMLElement><any>$(".templates .page.trackdetails").get(0)).outerHTML;
+            return template;
+        }
+
+        async bind(elementId: string) {
+            this.bindModel(elementId, null);
+            await this.fill();
+        }
+
+        getMethods() {
+            return jQuery.extend(super.getMethods(), {
+                album_click: async (album: string) => {
+                    try {
+                        let browsePage = new BrowsePage(this.pageManager, this.manager);
+                        browsePage.filter = "album:" + album;
+                        await this.pageManager.show(browsePage);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to browse for selected album:" + e, true);
+                    }
+                },
+                artist_click: (artist: string) => {
+                    try {
+                        let browsePage = new BrowsePage(this.pageManager, this.manager);
+                        browsePage.filter = "artist:" + artist;
+                        this.pageManager.show(browsePage);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to browse for selected artist: " + e, true);
+                    }
+                }
+            });
+        }
+
+        private async fill() {
+            this.loading = true;
+            let details = await this.manager.getDetails(this.trackId);
+            this.rebindModel(details);
+            this.loading = false;
+        }
+
+        async onevent(source: Page, eventName: string, data: any) {
+            if (eventName == "CurrentTrackChanged") {
+                try {
+                    this.trackId = (<Domain.IPlayerState>data).currentTrack.id;
+                    await this.fill();
+                } catch (e) {
+                    NotificationManager.showNotification("Unable to update details: " + e, true);
+                }
+            }
+        }
+    }
+
+
+    class BrowsePage extends Page {
+        protected manager: Domain.Manager;
+
+        private loading: boolean = false;
+
+        private PAGE_SIZE = 100;
+
+        private viewState = {
+            tileView: false,
+            filter: "",
+            title: 'Browse',
+            selectedId: "",
+            selectedIndex: -1,
+            hasDetails: false,
+
+            showSorting: true,
+            sortBy: '',
+
+            hasMoreResults: false,
+            lastOffset: 0
+            //    contextMenuTop: 0
+        };
+
+        get title(): string { return this.viewState.title; }
+        set title(value: string) { this.viewState.title = value; }
+
+        get filter(): string { return this.viewState.filter; }
+        set filter(value: string) { this.viewState.filter = value; }
+
+        private items: Domain.IAlbumOrTrackItem[] = [];
+
+        private forPlaylist?: Domain.IPlaylist;
+
+        private parentAlbumId?: string;
+        constructor(pageManager: PageManager, manager: Domain.Manager, parentAlbumId?: string, forPlaylist?: Domain.IPlaylist) {
+            super(pageManager);
+            this.manager = manager;
+            this.forPlaylist = forPlaylist;
+            this.parentAlbumId = parentAlbumId;
+            if (typeof (this.parentAlbumId) !== "undefined")
+                this.viewState.showSorting = false;
+        }
+
+        getTemplate(): string {
+            var template = (<HTMLElement><any>$(".templates .page.browse").get(0)).outerHTML;
+            return template;
+        }
+
+        getMethods(): any {
+            return jQuery.extend(super.getMethods(), {
+                item_click: (id: string, index: number, event: Event) => {
+                    this.viewState.selectedId = (id === this.viewState.selectedId) ? "" : id;
+                    this.viewState.selectedIndex = (index === this.viewState.selectedIndex ? - 1 : index);
+                    this.viewState.hasDetails = this.viewState.selectedIndex >= 0 && !this.items[this.viewState.selectedIndex].isTrack;
+
+                    // this.viewState.contextMenuTop = (<HTMLElement>event.target).getBoundingClientRect().top +  (<HTMLElement>event.target).getBoundingClientRect().height; 
+                },
+
+                tileview_click: () => {
+                    this.viewState.tileView = !this.viewState.tileView;
+                },
+
+                filter_change: async () => {
+                    try {
+                        await this.fill(0);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to load results: " + e, true);
+                    }
+                },
+
+                showDetails_click: async () => {
+                    try {
+
+                        let item = this.items[this.viewState.selectedIndex];
+                        let browsePage = new BrowsePage(this.pageManager, this.manager, this.viewState.selectedId, this.forPlaylist);
+                        browsePage.viewState.filter = this.viewState.filter;
+                        browsePage.title = item.name;
+                        await this.pageManager.show(browsePage);
+
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to load details: " + e, true);
+                    }
+                },
+
+                addToPlaylist_click: async () => {
+                    let item = this.items[this.viewState.selectedIndex];
+
+                    try {
+                        let playlistSelector: AddToPlaylistsSelectorPage = new AddToPlaylistsSelectorPage(this.pageManager, this.manager, item, async () => {
+                            try {
+                                await this.manager.addToPlaylist(item, playlistSelector.selectedId);
+                                NotificationManager.showNotification(`${item.name} added to playlist ${playlistSelector.selectedPlaylist!.name}`);
+                            } catch (e) {
+                                NotificationManager.showNotification(`Unable to add ${item.name} to playlist ${playlistSelector.selectedPlaylist!.name}: ` + e, true);
+                            }
+                        });
+                        await this.pageManager.show(playlistSelector);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to fetch playlists: " + e, true);
+                    }
+                },
+
+                removeFromPlaylist_click: async () => {
+                    if (typeof this.forPlaylist === "undefined") return;
+
+                    let item = this.items[this.viewState.selectedIndex];
+
+                    try {
+                        await this.manager.removeFromPlaylist(item, this.forPlaylist.id);
+                        NotificationManager.showNotification(`${item.name} removed from playlist ${this.forPlaylist.name}`);
+                        this.items.splice(this.viewState.selectedIndex, 1);
+                        this.deselect();
+                    } catch (e) {
+                        NotificationManager.showNotification(`Unable to remove ${item.name} from playlist ${this.forPlaylist.name}: ` + e, true);
+                    }
+                },
+
+                playNow_click: async () => {
+
+                    let item = this.items[this.viewState.selectedIndex];
+                    try {
+                        let playlistId: string | undefined = (typeof this.forPlaylist === "undefined") ? undefined : this.forPlaylist.id;
+                        let player: Domain.IPlayerState = await this.manager.playAlbumOrTrackNow(item, playlistId);
+                        this.pageManager.emit(this, "PlayerStateChanged", player);
+                        this.deselect();
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to play the track now: " + e, true);
+                    }
+                    // probably goto [All] playlist if we are not browsing for a specific playlist,
+                    // otherwise switch to the specific playlist
+                },
+
+                playAfterCurrentTrack_click: async () => {
+
+                    // noooot exactly how i'll do this, swap the order around in the playlist i guess?
+                    let item = this.items[this.viewState.selectedIndex];
+                    try {
+                        let playlistId: string | undefined = (typeof this.forPlaylist === "undefined") ? undefined : this.forPlaylist.id;
+                        await this.manager.playAlbumOrTrackAfterCurrentTrack(item, playlistId);
+                        NotificationManager.showNotification("Item successfully (re)queued");
+                        this.deselect();
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to play the track after the current track: " + e, true);
+                    }
+                },
+
+                sortBy_click: async (sortField: string) => {
+                    try {
+                        this.viewState.sortBy = sortField;
+                        console.log("Sorting changed to " + this.viewState.sortBy);
+
+                        await this.fill(0);
+                    } catch (e) {
+                        NotificationManager.showNotification("Unable to load results: " + e, true);
+                    }
+                },
+
+                loadMore_click: async () => {
+                    if (this.viewState.hasMoreResults) {
+                        await this.fill(this.viewState.lastOffset + this.PAGE_SIZE);
+                    }
+                },
+
+                list_scroll: async (event: Event) => {
+                    let rect = (<HTMLElement>event.target).getBoundingClientRect();
+                    let scrollPerc = ((<HTMLElement>event.target).scrollTop / ((<HTMLElement>event.target).scrollHeight - rect.height));
+                    const SCROLL_PERCENTAGE_THRESHOLD = 0.9;
+
+                    if (scrollPerc > SCROLL_PERCENTAGE_THRESHOLD && this.viewState.hasMoreResults && !this.loading) {
+                        await this.fill(this.viewState.lastOffset + this.PAGE_SIZE);
+                    }
+                }
+
+            });
+        }
+
+        private deselect() {
+            this.viewState.selectedId = "";
+            this.viewState.selectedIndex = -1;
+        }
+
+        async bind(id: string) {
+            this.bindModel(id, this.items);
+            await this.fill(0);
+        }
+
+
+        private async fill(offset: number) {
+            if (offset == 0)
+                this.items.splice(0, this.items.length);
+
+            this.loading = true;
+
+            let result: Domain.APIMessages.GetAlbumsOrTracksResult;
+
+            let forPlaylistId: string | undefined = (typeof this.forPlaylist === "undefined") ? undefined : this.forPlaylist.id;
+
+            if (typeof this.parentAlbumId === "undefined")
+                result = await this.manager.getAlbumsOrTracks(this.viewState.filter, this.viewState.sortBy, forPlaylistId, offset, this.PAGE_SIZE)
+            else
+                result = await this.manager.getTracks(this.viewState.filter, this.parentAlbumId, forPlaylistId, offset, this.PAGE_SIZE);
+
+            for (let i: number = 0; i < result.items.length; i++)
+                this.items.push(result.items[i]);
+
+            this.viewState.lastOffset = offset;
+            this.viewState.hasMoreResults = this.viewState.lastOffset + this.PAGE_SIZE < result.totalCount;
+
+            this.loading = false;
+        }
+    }
+}
+
+class API {
+
+    static target: GUI.MainPage;
+    static playPause() {
+        API.target.togglePlayback();
+    }
+
+    static stop() {
+        API.target.stopPlayback();
+    }
+
+    static forward() {
+        API.target.playNext(false);
+    }
+
+    static rewind() {
+        API.target.playPrevious();
+    }
+
+    static volumeUp() {
+        API.target.volumeUp();
+    }
+
+    static volumeDown() {
+        API.target.volumeDown();
+    }
+
+    static getInfo() {
+        let currentTrack = API.target.currentTrack;
+        if (currentTrack == null)
+            return "";
+        else
+            return currentTrack.artists.join(",") + " - " + currentTrack.title;
+    }
+}
+
+
+
+async function initialize() {
+    var trackManager = new Domain.Manager();
+    var pageManager = new GUI.PageManager();
+
+    var mainPage = new GUI.MainPage(pageManager, trackManager);
+
+    API.target = mainPage;
+
+    try {
+        await pageManager.show(mainPage);
+    } catch (e) {
+        GUI.NotificationManager.showNotification("Error: " + e, true);
+    }
+}
+
+
+
+initialize();

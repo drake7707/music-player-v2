@@ -1,0 +1,481 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Music player</title>
+
+    <link href="styles/lib/roboto.css" rel="stylesheet">
+    <link href="styles/lib/icons.css" rel="stylesheet">
+    <link href="styles/lib/perfect-scrollbar.css" rel="stylesheet">
+    <link rel='stylesheet' href='styles/main.css' />
+
+    <script src="scripts/lib/jquery.js"></script>
+    <script src="scripts/lib/perfect-scrollbar.jquery.js"></script>
+    <script src="scripts/lib/vue.js"></script>
+
+    <script src="scripts/lib/howler.js"></script>
+    <script src="scripts/lib/jquery.jplayer.js"></script>
+
+    <script src="scripts/lib/moment.js"></script>
+    <script src="scripts/lib/es6-promise.js"></script>
+    <script src="scripts/lib/require.js"></script>
+
+    <script>
+        if (!Promise) Promise.polyfill;
+    </script>
+
+    <script type="text/javascript">
+        var appInsights = window.appInsights || function (config) {
+            function i(config) {
+                t[config] = function () {
+                    var i = arguments;
+                    t.queue.push(function () {
+                        t[config].apply(t, i)
+                    })
+                }
+            }
+            var t = {
+                config: config
+            },
+                u = document,
+                e = window,
+                o = "script",
+                s = "AuthenticatedUserContext",
+                h = "start",
+                c = "stop",
+                l = "Track",
+                a = l + "Event",
+                v = l + "Page",
+                y = u.createElement(o),
+                r, f;
+            y.src = config.url || "https://az416426.vo.msecnd.net/scripts/a/ai.0.js";
+            u.getElementsByTagName(o)[0].parentNode.appendChild(y);
+            try {
+                t.cookie = u.cookie
+            } catch (p) { }
+            for (t.queue = [], t.version = "1.0", r = ["Event", "Exception", "Metric", "PageView", "Trace", "Dependency"]; r.length;) i("track" + r.pop());
+            return i("set" + s), i("clear" + s), i(h + a), i(c + a), i(h + v), i(c + v), i("flush"), config.disableExceptionTracking || (r = "onerror", i("_" + r), f = e[r], e[r] = function (config, i, u, e, o) {
+                var s = f && f(config, i, u, e, o);
+                return s !== !0 && t["_" + r](config, i, u, e, o), s
+            }), t
+        }({
+            instrumentationKey: "4e12db72-95c0-4024-a864-029cf6f9b5e7"
+        });
+
+        window.appInsights = appInsights;
+        appInsights.trackPageView();
+    </script>
+</head>
+
+<body class="limit-size">
+    <div class="background">
+        <svg>
+            <defs>
+                <filter id="svgBlur" x="0" y="0" width="100%" height="100%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="15"></feGaussianBlur>
+                </filter>
+            </defs>
+            <image id="artbackgroundsvg" xlink:href="" width="100%" height="100%" filter="url(#svgBlur)" preserveAspectRatio="xMinYMid slice"></image>
+        </svg>
+    </div>
+    <div class="pages">
+    </div>
+    <div class="notifications">
+
+    </div>
+
+
+    <div class="templates" style="display:none">
+        <div class="loader">
+            <svg version="1.1" class="loading-icon" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="24px" height="30px" viewBox="0 0 24 30" style="enable-background:new 0 0 50 50;" xml:space="preserve">
+            <rect x="0" y="13" width="4" height="5" fill="#333">
+            <animate attributeName="height" attributeType="XML" values="5;21;5" begin="0s" dur="0.6s" repeatCount="indefinite" />
+            <animate attributeName="y" attributeType="XML" values="13; 5; 13" begin="0s" dur="0.6s" repeatCount="indefinite" />
+                </rect>
+            <rect x="10" y="13" width="4" height="5" fill="#333">
+            <animate attributeName="height" attributeType="XML" values="5;21;5" begin="0.15s" dur="0.6s" repeatCount="indefinite" />
+            <animate attributeName="y" attributeType="XML" values="13; 5; 13" begin="0.15s" dur="0.6s" repeatCount="indefinite" />
+                </rect>
+            <rect x="20" y="13" width="4" height="5" fill="#333">
+            <animate attributeName="height" attributeType="XML" values="5;21;5" begin="0.3s" dur="0.6s" repeatCount="indefinite" />
+            <animate attributeName="y" attributeType="XML" values="13; 5; 13" begin="0.3s" dur="0.6s" repeatCount="indefinite" />
+                </rect>
+            </svg>
+        </div>
+
+        <div class='page main' v-bind:class="[ page.active ? 'active' : '' ]">
+            <!-- @Model Player -->
+            <div class="loading-container" v-bind:style="[ (page.loading) ? {display:'block'} : {display:'none'} ]">
+                <loading></loading>
+            </div>
+            <div v-if="model != null" class='art' v-backgroundimage="(model.currentTrack == null ? '' : model.currentTrack.artImage)">
+                <div class='group'>
+                    <span class='line' v-fadetext="model.currentTrack == null ? '(No track selected)' : model.currentTrack.title"></span>
+                    <br />
+                    <span v-if="model.currentTrack != null" v-fadetext="(model.currentTrack.artists == null || model.currentTrack.artists.length == 0 || model.currentTrack.artists.join(',') == '') ? '' : ('by ' + model.currentTrack.artists.join(', '))"></span>
+                    <br />
+                    <span v-if="model.currentTrack != null" class='line' v-fadetext="(model.currentTrack.album != null && model.currentTrack.album.length > 0) ? (model.currentTrack.album + ' - #' + model.currentTrack.trackNr) : ''"></span>
+                </div>
+            </div>
+            <div v-if="model != null" class='progress'>
+                <div v-on:mouseup="progressbar_mouseup($event)" class='bar'>
+                    <div class='inner-bar' v-bind:style="{ 'width': (page.viewState.progress * 100) + '%' }"></div>
+                </div>
+                <div class="labels">
+                    <div class="current">{{formattedCurrentTime}}</div>
+                    <div class="total">{{formattedTotalTime}}</div>
+                </div>
+            </div>
+            <div v-if="page.toggleShowVolume" v:on-click="page.toggleVolume = false" class="volume-overlay">
+                <span class='volumeLabel'>{{Math.round(page.viewState.currentVolume * 100) + "%"}}</span>
+                <div class='volume-control'>
+                    <i class="icon icon-volume-strike"></i>
+                    <div v-on:mouseup="volumebar_mouseup($event)" class="volume bar">
+                        <div class='inner-bar' v-bind:style="{ 'width': (page.viewState.currentVolume * 100) + '%' }"></div>
+                    </div>
+                    <i class="icon icon-volume"></i>
+                </div>
+            </div>
+            <div v-if="model != null" class='controls'>
+                <div v-if="model.currentTrack != null" v-on:click="rewind_click" class='control rewind'>
+                    <i v-if="!page.loadingPrevious" class="icon icon-rewind"></i>
+                    <loading v-if="page.loadingPrevious"></loading>
+                </div>
+                <div v-if="model.currentTrack != null" v-on:click="play_click" class='control play'>
+                    <i v-if="!page.loadingTrack && !page.viewState.isPlaying" class="icon icon-play"></i>
+                    <i v-if="!page.loadingTrack && page.viewState.isPlaying" class="icon icon-pause"></i>
+                    <loading v-if="page.loadingTrack"></loading>
+                </div>
+                <div v-if="model.currentTrack != null" v-on:click="fastForward_click" class='control fast-forward'>
+                    <i v-if="!page.loadingNext" class="icon icon-fast-forward"></i>
+                    <loading v-if="page.loadingNext"></loading>
+                </div>
+                <div v-if="model.currentTrack != null" v-on:click="stop_click" class='control stop'>
+                    <i class="icon icon-stop"></i>
+                </div>
+                <div v-if="model.currentTrack != null" v-on:click="shuffle_click" class='control shuffle' v-bind:class="[ model.shuffle ? 'checked' : '' ]">
+                    <i class="icon icon-shuffle"></i>
+                </div>
+                <div v-if="model.currentTrack != null" v-on:click="like_click" class="control like" v-bind:class="[ model.currentTrack != null && model.currentTrack.liked == 1 ? 'checked' : '' ]">
+                    <i class="icon icon-heart-empty"></i>
+                    <i class="icon icon-heart"></i>
+                </div>
+                <div v-if="model.currentTrack != null" v-on:click="volume_click" class='control menu' v-bind:class="[ page.toggleShowVolume ? 'checked' : '' ]">
+                    <i class="icon icon-volume"></i>
+                </div>
+                <div v-on:click="menu_click" class='control menu'>
+                    <i class="icon icon-menu"></i>
+                </div>
+            </div>
+        </div>
+        <div class='page menu' v-bind:class="[ page.active ? 'active' : '' ]">
+            <div class="header">
+                <div class='left'>
+                    <a v-on:click="back_click" class="icon-button back">
+                        <i class="icon icon-arrow-left"></i>
+                    </a>
+                </div>
+                <span class='title'>Menu</span>
+                <div class='right'>
+                </div>
+            </div>
+            <div class="body">
+                <div class="list">
+                    <div v-if="page.currentState.currentTrack != null" v-on:click="details_click" class="item clickable">
+                        <span class="name"><i class="icon icon-info"></i>Details</span>
+                    </div>
+                    <div v-if="page.currentState.currentTrack != null" v-on:click="addToPlaylist_click" class="item clickable">
+                        <span class="name"><i class="icon icon-add"></i>Add to playlist</span>
+                    </div>
+                    <div v-on:click="playlists_click" class="item clickable">
+                        <span class="name"><i class="icon icon-list-number"></i>Playlists</span>
+                    </div>
+                    <div v-on:click="browse_click" class="item clickable">
+                        <span class="name"><i class="icon icon-grid-1"></i>Browse</span>
+                    </div>
+                </div>
+            </div>
+            <div class="footer">
+                <div class="menu actions">
+                </div>
+            </div>
+        </div>
+        <div class='page trackdetails' v-bind:class="[ page.active ? 'active' : '' ]">
+            <div class="header">
+                <div class='left'>
+                    <a v-on:click="back_click" class="icon-button back">
+                        <i class="icon icon-arrow-left"></i>
+                    </a>
+                </div>
+                <span class='title'>Details</span>
+                <div class='right'>
+                </div>
+            </div>
+            <div class="body">
+                <div class="loading-container" v-bind:style="[ (page.loading) ? {display:'block'} : {display:'none'} ]">
+                    <loading></loading>
+                </div>
+                <div v-if="model != null && !page.loading">
+                    <div class="field">
+                        <div class="name">
+                            Title
+                        </div>
+                        <div class="value">
+                            {{model.title}}
+                        </div>
+                    </div>
+                    <div class="field">
+                        <div class="name">
+                            Artists
+                        </div>
+                        <div class="value">
+                            <span class="clickable" v-on:click="artist_click(artist)" v-for="(artist,index) in model.artists">{{artist}}<span v-if="index+1 < model.artists.length">,</span></span>
+                            <span v-if="model.artists.length == 0">No artist</span>
+                        </div>
+                    </div>
+                    <div v-if="model.album != null && model.album.length > 0" class="field">
+                        <div class="name">
+                            Album
+                        </div>
+                        <div v-if="model.album != null && model.album !== ''" class="value">
+                            <span class="clickable" v-on:click="album_click(model.album)">{{model.album}}</span>, track {{ model.trackNr}}
+                        </div>
+                        <div v-else class="value">
+                            No album
+                        </div>
+                    </div>
+                    <div class="field">
+                        <div class="name">
+                            Genres
+                        </div>
+                        <div class="value">
+                            {{model.genres.join(', ')}}
+                        </div>
+                    </div>
+                    <div class="field">
+                        <div class="name">
+                            Added on
+                        </div>
+                        <div class="value">
+                            <span class="date">{{moment(model.addedOn).format("YYYY-MM-DD")}}</span>
+                            <span class="time">{{moment(model.addedOn).format("HH:mm")}}</span>
+                        </div>
+                    </div>
+                    <div v-if="model.lastPlayed != null" class="field">
+                        <div class="name">
+                            Last played on
+                        </div>
+                        <div class="value">
+                            <span class="date">{{moment(model.lastPlayed).format("YYYY-MM-DD")}}</span>
+                            <span class="time">{{moment(model.lastPlayed).format("HH:mm")}}</span>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <div class="name">
+                            Number of times played
+                        </div>
+                        <div v-if="model.nrPlayed > 0" class="value">
+                            Played to end {{model.nrPlayedToEnd}} out of {{model.nrPlayed}} times
+                        </div>
+                        <div v-else class="value">
+                            Not played yet
+                        </div>
+                    </div>
+                    <div class="field">
+                        <div class="name">
+                            Scrobbles
+                        </div>
+                        <div class="value">
+                            <div v-if="model.lastScrobbles.length > 0" class="list">
+                                <div v-for="item in model.lastScrobbles" class="item">
+                                    <div class="name">
+                                        <span class="date">{{moment(item.on).format("YYYY-MM-DD")}}</span>
+                                        <span class="time">{{moment(item.on).format("HH:mm")}}</span>
+                                        <i v-if="item.playedToEnd" class="icon icon-check"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-else>
+                                No scrobbles yet
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="footer">
+                <div class="menu actions">
+                </div>
+            </div>
+        </div>
+        <div class='page playlists' v-bind:class="[ page.active ? 'active' : '' ]">
+            <div class="header">
+                <div class='left'>
+                    <a v-on:click="back_click" class="icon-button back">
+                        <i class="icon icon-arrow-left"></i>
+                    </a>
+                </div>
+                <span class='title'>{{page.title}}</span>
+                <div class='right'>
+                </div>
+            </div>
+            <div class="body">
+                <div class="list">
+                    <div v-on:click="item_click(item.id)" v-for="item in model" class="item clickable" v-bind:class="[ (item.id === page.selectedId) ? 'selected' : '' ]">
+                        <span class="name">
+                            {{item.name}}
+                            ({{item.nrOfTracks}} {{item.nrOfTracks == 1 ? "track" : "tracks"}})
+                            <span v-if="item.isCurrent"> (currently playing)</span>
+                            <span v-if="page.forItem != null">{{item.alreadyOnPlaylistCount}}/{{item.forItemSize}}</span>
+                        </span>
+                    </div>
+                </div>
+                <div class="loading-container" v-bind:style="[ (page.loading) ? {display:'block'} : {display:'none'} ]">
+                    <loading></loading>
+                </div>
+            </div>
+            <div class="footer">
+                <div class="menu actions" v-bind:style="[ (page.selectedId !== '' && page.canShowActions) ? {display:'block'} : {} ]">
+                    <div v-on:click="showDetails_click" class="item clickable default">
+                        <i class="icon icon-info"></i>Show details
+                    </div>
+                    <div class="item divider"></div>
+                    <div v-on:click="playNow_click" class="item clickable default">
+                        <i class="icon icon-play"></i>Play now
+                    </div>
+                    <div v-if="false" v-on:click="playAfterCurrentTrack_click" class="item clickable default">
+                        <a>Play after current track</a>
+                    </div>
+                    <div class="item divider"></div>
+                    <div v-if="page.selectedId != '0'" v-on:click="delete_click" class="item clickable">
+                        <i class="icon icon-delete"></i>Delete playlist
+                    </div>
+                </div>
+                <div class="menu" style="display:block">
+                    <div v-on:click="newPlaylist_click" class="item clickable default">
+                        <i class="icon icon-list-add"></i>New playlist
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class='page edit-playlist' v-bind:class="[ page.active ? 'active' : '' ]">
+            <div class="header">
+                <div class='left'>
+                    <a v-on:click="back_click" class="icon-button back">
+                        <i class="icon icon-arrow-left"></i>
+                    </a>
+                </div>
+                <span class='title'>{{ page.isNew ? "New playlist" : "Edit playlist" }}</span>
+                <div class='right'>
+                </div>
+            </div>
+            <div class="body">
+                <div class="form">
+                    <div class="form-input">
+                        <label>
+                            Playlist name
+                        </label>
+                        <input v-model="model.name" placeholder="Name" />
+                    </div>
+                    <div class="form-input">
+                        <button v-on:click="save_click" class="btn" type="submit">Save</button>
+                    </div>
+                </div>
+            </div>
+            <div class="footer">
+            </div>
+        </div>
+        <div class='page browse' v-bind:class="[ page.active ? 'active' : '' ]">
+            <div class="header">
+                <div class='left'>
+                    <a v-on:click="back_click" class="icon-button back">
+                        <i class="icon icon-arrow-left"></i>
+                    </a>
+                    <a v-on:click="tileview_click" class="icon-button viewtoggle" v-bind:class="[ page.viewState.tileView ? 'checked' : '' ]" title="Tile view">
+                        <i class="icon icon-grid"></i>
+                    </a>
+                    <a v-if="page.viewState.showSorting" v-on:click="sortBy_click('artist')" class="icon-button viewtoggle" v-bind:class="[ page.viewState.sortBy == 'artist' ? 'checked' : '' ]" title="Sort by artist">
+                        <i class="icon icon-sort"></i>
+                    </a>
+                    <a v-if="page.viewState.showSorting" v-on:click="sortBy_click('name')" class="icon-button viewtoggle" v-bind:class="[ page.viewState.sortBy == 'name' ? 'checked' : '' ]" title="Sort by name">
+                        <i class="icon icon-sort"></i>
+                    </a>
+                    <a v-if="page.viewState.showSorting" v-on:click="sortBy_click('addedon')" class="icon-button viewtoggle" v-bind:class="[ page.viewState.sortBy == 'addedon' ? 'checked' : '' ]" title="Sort by last added">
+                        <i class="icon icon-sort"></i>
+                    </a>
+                </div>
+                <span class='title'>{{page.viewState.title}}</span>
+                <div class='right'>
+                    <div class='search'>
+                        <input type="text" placeholder="Filter" v-model="page.viewState.filter" v-on:keyup="filter_keyup" />
+                        <i v-if="page.viewState.filter.length == 0" class="icon icon-search"></i>
+                        <i v-on:click="page.viewState.filter = ''; filter_change();" v-if="page.viewState.filter.length > 0" class="icon icon-delete clickable"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="body" v-perfectscrollbar v-on:scroll="list_scroll($event)" ref="body">
+                <div v-if="model.length > 0" v-bind:class="[ page.viewState.tileView ? 'tiles' : 'list' ]">
+                    <div v-on:click="item_click(item.id, index, $event)" v-for="(item,index) in model" class="item clickable" v-bind:class="[ (item.id === page.viewState.selectedId) ? 'selected' : '', (item.artImage === '' ? 'no-art' : '') ]">
+                        <div class="art" v-backgroundimage="item.artImage"></div>
+                        <span class="artist">{{(item.artists === '' || item.artists == null) ? '' : item.artists}}</span>
+                        <span class="name">{{(item.name === '' || item.name == null) ? (item.isTrack ? "(Untitled track)" : "(Untitled album)") : item.name}}</span>
+                    </div>
+                    <div v-if="page.viewState.hasMoreResults && !page.loading" v-on:click="loadMore_click" class="item no-art clickable">
+                        <span class="name"><i class="icon icon-menu"></i><span>Load more</span></span>
+                    </div>
+                </div>
+                <div v-if="model.length == 0 && !page.loading" class="noresults">
+                    <span>No results</span>
+                </div>
+                <div class="loading-container" v-bind:style="[ (page.loading) ? {display:'block'} : {display:'none'} ]">
+                    <loading></loading>
+                </div>
+            </div>
+            <div class="footer">
+                <!--  v-bind:style="[ (page.viewState.contextMenuTop == 0) ? {} : {top: page.viewState.contextMenuTop + 'px'} ]"-->
+                <div class="menu actions" v-bind:style="[ (page.viewState.selectedId !== '') ? {display:'block'} : {} ]">
+                    <div v-if="page.viewState.hasDetails" v-on:click="showDetails_click" class="item default clickable">
+                        <i class="icon icon-info"></i>Show details
+                    </div>
+                    <div v-on:click="playNow_click" class="item default clickable">
+                        <i class="icon icon-play"></i>Play now
+                    </div>
+                    <div v-if="false" v-on:click="playAfterCurrentTrack_click" class="item default clickable">
+                        <a>Play after current track</a>
+                    </div>
+                    <div v-if="typeof(page.forPlaylist) === 'undefined'" v-on:click="addToPlaylist_click" class="item clickable">
+                        <i class="icon icon-add"></i>Add to playlist...
+                    </div>
+                    <div v-if="typeof(page.forPlaylist) !== 'undefined'" v-on:click="removeFromPlaylist_click" class="item clickable">
+                        <i class="icon icon-delete"></i>Remove from playlist
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src='scripts/main.js'></script>
+    <script>
+
+        define("vue/types/vue", ["require", "exports"], function (require, exports) {
+              return {
+                Vue: window.Vue
+            };
+        });
+
+        requirejs.config({
+            baseUrl: 'lib',
+            paths: {
+                'main':'./scripts'
+            }
+        });
+
+        requirejs(['main'], function(MyApp) {
+            console.log('starting application...');
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.26730.8
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MusicPlayerV2", "MusicPlayerV2\MusicPlayerV2.csproj", "{BEC783F5-36C7-4D4E-871B-3B545A411FAB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PiMusicPlayerTray", "PiMusicPlayerTray\PiMusicPlayerTray.csproj", "{1E349C5D-A90F-44BC-88E5-522468A64960}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BEC783F5-36C7-4D4E-871B-3B545A411FAB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BEC783F5-36C7-4D4E-871B-3B545A411FAB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BEC783F5-36C7-4D4E-871B-3B545A411FAB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BEC783F5-36C7-4D4E-871B-3B545A411FAB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1E349C5D-A90F-44BC-88E5-522468A64960}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1E349C5D-A90F-44BC-88E5-522468A64960}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1E349C5D-A90F-44BC-88E5-522468A64960}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1E349C5D-A90F-44BC-88E5-522468A64960}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {61ACCD8D-B7A6-4EFC-A22F-0096FADF54C2}
+	EndGlobalSection
+EndGlobal
