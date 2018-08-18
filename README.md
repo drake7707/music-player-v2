@@ -7,6 +7,10 @@ This is the second version, it used to be a quickly whipped up player without an
 
 The front end is made with Typescript and Vue as template engine. The backend is using dotnetcore with an sqlite database.
 
+## Usage
+
+Change the appsettings.json to point to the correct directories. 2 database files are created, one for the metadata, another specifically for the cover images. The 3rd path you point to the actual directory containing the mp3 files. For setting up the Last FM integration, look at the Lpfm.LastFmScrobbler documentation.
+
 ## Screenshots
 
 ![](https://i.imgur.com/07AoCly.png)
