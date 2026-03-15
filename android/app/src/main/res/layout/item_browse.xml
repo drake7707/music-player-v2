@@ -68,48 +68,15 @@
                 android:alpha="0.7" />
         </LinearLayout>
 
-        <!-- Action buttons -->
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-            <ImageButton
-                android:id="@+id/btnPlayNow"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/play_now"
-                android:src="@drawable/ic_play"
-                android:padding="4dp" />
-
-            <ImageButton
-                android:id="@+id/btnPlayNext"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/play_next"
-                android:src="@drawable/ic_skip_next"
-                android:padding="4dp" />
-
-            <ImageButton
-                android:id="@+id/btnAddToPlaylist"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/add_to_playlist"
-                android:src="@drawable/ic_add"
-                android:padding="4dp" />
-
-            <ImageButton
-                android:id="@+id/btnDetails"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/details"
-                android:src="@drawable/ic_info"
-                android:padding="4dp" />
-        </LinearLayout>
+        <!-- Overflow menu button -->
+        <ImageButton
+            android:id="@+id/btnOverflow"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/more_options"
+            android:src="@drawable/ic_more_vert"
+            android:padding="8dp" />
 
     </LinearLayout>
 

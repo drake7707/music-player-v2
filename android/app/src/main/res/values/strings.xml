@@ -24,4 +24,7 @@
     <string name="test_connection">Test Connection</string>
     <string name="save_settings">Save</string>
     <string name="untitled_album">(Untitled album)</string>
+    <string name="more_options">More options</string>
+    <string name="browse_tracks">Browse tracks</string>
+    <string name="delete_playlist">Delete</string>
 </resources>

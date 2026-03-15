@@ -3,6 +3,7 @@ package com.drake7707.musicplayerv2.ui.playlists
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
+import android.widget.PopupMenu
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -39,7 +40,10 @@ class PlaylistsFragment : Fragment() {
     }
 
     private fun setupRecyclerView() {
-        adapter = PlaylistsAdapter { playlist -> showPlaylistActions(playlist) }
+        adapter = PlaylistsAdapter(
+            onItemClick = { playlist -> showPlaylistActions(playlist, null) },
+            onOverflowClick = { playlist, anchor -> showPlaylistActions(playlist, anchor) }
+        )
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerView.adapter = adapter
 
@@ -54,39 +58,43 @@ class PlaylistsFragment : Fragment() {
         }
     }
 
-    private fun showPlaylistActions(playlist: Playlist) {
+    private fun showPlaylistActions(playlist: Playlist, anchor: View?) {
         val isSpecialPlaylist = playlist.id == "0" || playlist.id == "-1"
-
-        val options = mutableListOf<String>().apply {
-            add("Browse tracks")
-            add("Play now")
-            if (!isSpecialPlaylist) {
-                add("Delete")
-            }
-        }
-
-        AlertDialog.Builder(requireContext())
-            .setTitle(playlist.name)
-            .setItems(options.toTypedArray()) { _, which ->
-                when (options[which]) {
-                    "Browse tracks" -> {
-                        val action = PlaylistsFragmentDirections.actionPlaylistsFragmentToBrowseFragment(
-                            albumId = "",
-                            playlistId = playlist.id,
-                            title = playlist.name
-                        )
-                        findNavController().navigate(action)
+        if (anchor != null) {
+            val popup = PopupMenu(requireContext(), anchor)
+            popup.menuInflater.inflate(R.menu.menu_playlist_item, popup.menu)
+            popup.menu.findItem(R.id.action_delete)?.isVisible = !isSpecialPlaylist
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    R.id.action_browse_tracks -> {
+                        navigateToBrowse(playlist)
+                        true
                     }
-                    "Play now" -> {
+                    R.id.action_play_now -> {
                         sharedViewModel.playPlaylistNow(playlist.id)
                         findNavController().navigate(R.id.playerFragment)
+                        true
                     }
-                    "Delete" -> {
+                    R.id.action_delete -> {
                         confirmDelete(playlist)
+                        true
                     }
+                    else -> false
                 }
             }
-            .show()
+            popup.show()
+        } else {
+            navigateToBrowse(playlist)
+        }
+    }
+
+    private fun navigateToBrowse(playlist: Playlist) {
+        val action = PlaylistsFragmentDirections.actionPlaylistsFragmentToBrowseFragment(
+            albumId = "",
+            playlistId = playlist.id,
+            title = playlist.name
+        )
+        findNavController().navigate(action)
     }
 
     private fun confirmDelete(playlist: Playlist) {

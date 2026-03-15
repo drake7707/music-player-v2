@@ -12,15 +12,12 @@ import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import com.drake7707.musicplayerv2.R
-import com.drake7707.musicplayerv2.data.api.RetrofitClient
 import com.drake7707.musicplayerv2.data.api.models.AlbumOrTrackItem
 import com.drake7707.musicplayerv2.data.api.models.Item
 import com.drake7707.musicplayerv2.databinding.FragmentBrowseBinding
 import com.drake7707.musicplayerv2.ui.SharedPlayerViewModel
-import kotlinx.coroutines.launch
 
 class BrowseFragment : Fragment() {
 
@@ -60,23 +57,6 @@ class BrowseFragment : Fragment() {
                     Item(item.id.toString(), item.name, item.isTrack),
                     viewModel.currentPlaylistId
                 )
-            },
-            onPlayNext = { item ->
-                // Queue item to play after current
-                lifecycleScope.launch {
-                    try {
-                        val repo = com.drake7707.musicplayerv2.data.MusicRepository(
-                            RetrofitClient.getApiService()
-                        )
-                        repo.playAlbumOrTrackAfterCurrentTrack(
-                            Item(item.id.toString(), item.name, item.isTrack),
-                            viewModel.currentPlaylistId
-                        )
-                        Toast.makeText(requireContext(), "Queued: ${item.name}", Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        Toast.makeText(requireContext(), "Failed to queue: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
-                }
             },
             onAddToPlaylist = { item ->
                 val action = BrowseFragmentDirections.actionBrowseFragmentToAddToPlaylistFragment(

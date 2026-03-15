@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Binder
 import android.os.IBinder
 import android.support.v4.media.MediaMetadataCompat
@@ -19,6 +20,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.bumptech.glide.Glide
 import com.drake7707.musicplayerv2.R
 import com.drake7707.musicplayerv2.data.MusicRepository
 import com.drake7707.musicplayerv2.data.api.RetrofitClient
@@ -58,6 +60,8 @@ class MusicPlaybackService : LifecycleService() {
     private val binder = LocalBinder()
     private lateinit var exoPlayer: ExoPlayer
     private lateinit var mediaSession: MediaSessionCompat
+    private var albumArtBitmap: Bitmap? = null
+    private var albumArtUrl: String? = null
 
     // Always returns a fresh repository using the current base URL
     private val repository get() = MusicRepository(RetrofitClient.getApiService())
@@ -124,7 +128,10 @@ class MusicPlaybackService : LifecycleService() {
             trackStartedPlayingMs = System.currentTimeMillis()
         }
         // Always promote to foreground so background network calls (e.g. auto-advance) work
-        startForeground(NOTIFICATION_ID, buildNotification(track))
+        // Start with whatever art we have cached; updateMediaSession will reload art if URL changed
+        albumArtUrl = null // reset so updateMediaSession re-fetches art for the new track
+        albumArtBitmap = null
+        startForeground(NOTIFICATION_ID, buildNotification(track, null))
         updateMediaSession()
         notifyStateChanged()
     }
@@ -139,7 +146,7 @@ class MusicPlaybackService : LifecycleService() {
     fun resumePlayback() {
         exoPlayer.play()
         if (trackStartedPlayingMs == 0L) trackStartedPlayingMs = System.currentTimeMillis()
-        currentPlayerState?.currentTrack?.let { startForeground(NOTIFICATION_ID, buildNotification(it)) }
+        currentPlayerState?.currentTrack?.let { startForeground(NOTIFICATION_ID, buildNotification(it, albumArtBitmap)) }
         updateMediaSession()
         notifyStateChanged()
     }
@@ -229,7 +236,22 @@ class MusicPlaybackService : LifecycleService() {
 
     private fun updateNotificationIfNeeded() {
         val track = currentPlayerState?.currentTrack ?: return
-        val notification = buildNotification(track)
+        val notification = buildNotification(track, albumArtBitmap)
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun publishMetadata(track: Track, art: Bitmap?) {
+        mediaSession.setMetadata(
+            MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.artists.joinToString(", "))
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, track.album)
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, exoPlayer.duration.coerceAtLeast(0L))
+                .apply { if (art != null) putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, art) }
+                .build()
+        )
+        val notification = buildNotification(track, art)
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIFICATION_ID, notification)
     }
@@ -237,14 +259,34 @@ class MusicPlaybackService : LifecycleService() {
     private fun updateMediaSession() {
         val track = currentPlayerState?.currentTrack
         if (track != null) {
-            mediaSession.setMetadata(
-                MediaMetadataCompat.Builder()
-                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
-                    .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.artists.joinToString(", "))
-                    .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, track.album)
-                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, exoPlayer.duration.coerceAtLeast(0L))
-                    .build()
-            )
+            val rawArt = track.artImage
+            val artUrl = if (!rawArt.isNullOrEmpty()) {
+                if (rawArt.startsWith("http")) rawArt
+                else RetrofitClient.getBaseUrl().trimEnd('/') + rawArt
+            } else null
+
+            // Publish metadata immediately (art may already be cached from a previous load)
+            publishMetadata(track, if (artUrl == albumArtUrl) albumArtBitmap else null)
+
+            if (artUrl != null && artUrl != albumArtUrl) {
+                albumArtUrl = artUrl
+                albumArtBitmap = null
+                Glide.with(this)
+                    .asBitmap()
+                    .load(artUrl)
+                    .into(object : com.bumptech.glide.request.target.CustomTarget<Bitmap>() {
+                        override fun onResourceReady(resource: Bitmap, transition: com.bumptech.glide.request.transition.Transition<in Bitmap>?) {
+                            albumArtBitmap = resource
+                            // Only update if the same track is still current
+                            if (currentPlayerState?.currentTrack?.artImage == track.artImage) {
+                                publishMetadata(track, resource)
+                            }
+                        }
+                        override fun onLoadCleared(placeholder: android.graphics.drawable.Drawable?) {
+                            albumArtBitmap = null
+                        }
+                    })
+            }
         }
         val playbackState = PlaybackStateCompat.Builder()
             .setActions(
@@ -264,7 +306,7 @@ class MusicPlaybackService : LifecycleService() {
         mediaSession.setPlaybackState(playbackState)
     }
 
-    private fun buildNotification(track: Track): Notification {
+    private fun buildNotification(track: Track, albumArt: Bitmap? = null): Notification {
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -289,6 +331,7 @@ class MusicPlaybackService : LifecycleService() {
             .setContentTitle(track.title)
             .setContentText(track.artists.joinToString(", "))
             .setSubText(track.album)
+            .setLargeIcon(albumArt)
             .setContentIntent(contentIntent)
             .addAction(
                 R.drawable.ic_skip_previous, "Previous",

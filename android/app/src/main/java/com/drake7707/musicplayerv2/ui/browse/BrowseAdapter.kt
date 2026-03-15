@@ -2,6 +2,7 @@ package com.drake7707.musicplayerv2.ui.browse
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.widget.PopupMenu
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -14,7 +15,6 @@ import com.drake7707.musicplayerv2.databinding.ItemBrowseBinding
 class BrowseAdapter(
     private val onItemClick: (AlbumOrTrackItem) -> Unit,
     private val onPlayNow: (AlbumOrTrackItem) -> Unit,
-    private val onPlayNext: (AlbumOrTrackItem) -> Unit,
     private val onAddToPlaylist: (AlbumOrTrackItem) -> Unit,
     private val onShowDetails: (AlbumOrTrackItem) -> Unit
 ) : ListAdapter<AlbumOrTrackItem, BrowseAdapter.ViewHolder>(DiffCallback) {
@@ -58,10 +58,21 @@ class BrowseAdapter(
 
             binding.root.setOnClickListener { onItemClick(item) }
 
-            binding.btnPlayNow.setOnClickListener { onPlayNow(item) }
-            binding.btnPlayNext.setOnClickListener { onPlayNext(item) }
-            binding.btnAddToPlaylist.setOnClickListener { onAddToPlaylist(item) }
-            binding.btnDetails.setOnClickListener { onShowDetails(item) }
+            binding.btnOverflow.setOnClickListener { anchor ->
+                val popup = PopupMenu(anchor.context, anchor)
+                popup.menuInflater.inflate(R.menu.menu_browse_item, popup.menu)
+                // Hide "Details" for album items (details only makes sense for tracks)
+                popup.menu.findItem(R.id.action_details)?.isVisible = item.isTrack
+                popup.setOnMenuItemClickListener { menuItem ->
+                    when (menuItem.itemId) {
+                        R.id.action_play_now -> { onPlayNow(item); true }
+                        R.id.action_add_to_playlist -> { onAddToPlaylist(item); true }
+                        R.id.action_details -> { onShowDetails(item); true }
+                        else -> false
+                    }
+                }
+                popup.show()
+            }
         }
     }
 

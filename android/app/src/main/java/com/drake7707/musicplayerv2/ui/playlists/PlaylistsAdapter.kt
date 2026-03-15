@@ -2,6 +2,7 @@ package com.drake7707.musicplayerv2.ui.playlists
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.widget.PopupMenu
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -10,7 +11,8 @@ import com.drake7707.musicplayerv2.data.api.models.Playlist
 import com.drake7707.musicplayerv2.databinding.ItemPlaylistBinding
 
 class PlaylistsAdapter(
-    private val onItemClick: (Playlist) -> Unit
+    private val onItemClick: (Playlist) -> Unit,
+    private val onOverflowClick: (Playlist, android.view.View) -> Unit
 ) : ListAdapter<Playlist, PlaylistsAdapter.ViewHolder>(DiffCallback) {
 
     companion object DiffCallback : DiffUtil.ItemCallback<Playlist>() {
@@ -24,6 +26,7 @@ class PlaylistsAdapter(
             binding.tvTrackCount.text = "${playlist.nrOfTracks} tracks"
             binding.ivCurrentIndicator.visibility = if (playlist.isCurrent) android.view.View.VISIBLE else android.view.View.GONE
             binding.root.setOnClickListener { onItemClick(playlist) }
+            binding.btnOverflow.setOnClickListener { onOverflowClick(playlist, it) }
         }
     }
 
