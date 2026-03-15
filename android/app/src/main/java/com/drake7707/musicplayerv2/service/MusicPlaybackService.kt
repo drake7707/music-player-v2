@@ -83,6 +83,14 @@ class MusicPlaybackService : LifecycleService() {
         exoPlayer = ExoPlayer.Builder(this).build()
         exoPlayer.addListener(playerListener)
         mediaSession = MediaSessionCompat(this, "MusicPlaybackService").apply {
+            setCallback(object : MediaSessionCompat.Callback() {
+                override fun onPlay() { resumePlayback() }
+                override fun onPause() { pausePlayback() }
+                override fun onSkipToNext() { skipToNext(false) }
+                override fun onSkipToPrevious() { skipToPrevious() }
+                override fun onSeekTo(pos: Long) { seekTo(pos) }
+                override fun onStop() { stopSelf() }
+            })
             isActive = true
         }
     }
