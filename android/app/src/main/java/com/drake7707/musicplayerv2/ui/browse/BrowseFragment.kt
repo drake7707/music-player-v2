@@ -30,6 +30,9 @@ class BrowseFragment : Fragment() {
     private val args: BrowseFragmentArgs by navArgs()
     private lateinit var adapter: BrowseAdapter
 
+    /** Set to true when a sort change triggers a reload; consumed by the items observer. */
+    private var pendingScrollToTop = false
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentBrowseBinding.inflate(inflater, container, false)
         return binding.root
@@ -151,7 +154,11 @@ class BrowseFragment : Fragment() {
 
     private fun observeViewModel() {
         viewModel.items.observe(viewLifecycleOwner) { items ->
-            adapter.submitList(items)
+            val scrollAfter = pendingScrollToTop
+            pendingScrollToTop = false
+            adapter.submitList(items) {
+                if (scrollAfter) binding.recyclerView.scrollToPosition(0)
+            }
             binding.tvEmpty.visibility = if (items.isEmpty() && viewModel.isLoading.value != true) View.VISIBLE else View.GONE
         }
 
@@ -177,7 +184,7 @@ class BrowseFragment : Fragment() {
 
         viewModel.activeSortBy.observe(viewLifecycleOwner) { sortBy ->
             updateSortButtons(sortBy)
-            binding.recyclerView.scrollToPosition(0)
+            pendingScrollToTop = true
         }
     }
 
