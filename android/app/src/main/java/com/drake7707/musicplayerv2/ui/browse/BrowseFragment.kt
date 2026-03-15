@@ -177,6 +177,7 @@ class BrowseFragment : Fragment() {
 
         viewModel.activeSortBy.observe(viewLifecycleOwner) { sortBy ->
             updateSortButtons(sortBy)
+            binding.recyclerView.scrollToPosition(0)
         }
     }
 
