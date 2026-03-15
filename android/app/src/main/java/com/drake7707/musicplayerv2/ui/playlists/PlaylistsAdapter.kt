@@ -12,7 +12,7 @@ import com.drake7707.musicplayerv2.databinding.ItemPlaylistBinding
 
 class PlaylistsAdapter(
     private val onItemClick: (Playlist) -> Unit,
-    private val onOverflowClick: (Playlist, android.view.View) -> Unit
+    private val onOverflowClick: (Playlist, android.view.View) -> Unit = { _, _ -> }
 ) : ListAdapter<Playlist, PlaylistsAdapter.ViewHolder>(DiffCallback) {
 
     companion object DiffCallback : DiffUtil.ItemCallback<Playlist>() {
