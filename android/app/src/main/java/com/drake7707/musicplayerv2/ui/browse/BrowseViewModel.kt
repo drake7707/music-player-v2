@@ -35,6 +35,9 @@ class BrowseViewModel(application: Application) : AndroidViewModel(application) 
     private val _title = MutableLiveData("Browse")
     val title: LiveData<String> = _title
 
+    private val _activeSortBy = MutableLiveData("name")
+    val activeSortBy: LiveData<String> = _activeSortBy
+
     var currentFilter = ""
         private set
     var currentSortBy = "name"
@@ -61,6 +64,7 @@ class BrowseViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setSortBy(sortBy: String) {
         currentSortBy = sortBy
+        _activeSortBy.value = sortBy
         loadItems(reset = true)
     }
 

@@ -1,5 +1,6 @@
 package com.drake7707.musicplayerv2.ui.browse
 
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -13,11 +14,11 @@ import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.drake7707.musicplayerv2.R
 import com.drake7707.musicplayerv2.data.api.models.AlbumOrTrackItem
 import com.drake7707.musicplayerv2.data.api.models.Item
 import com.drake7707.musicplayerv2.databinding.FragmentBrowseBinding
 import com.drake7707.musicplayerv2.ui.SharedPlayerViewModel
+import com.google.android.material.color.MaterialColors
 
 class BrowseFragment : Fragment() {
 
@@ -112,7 +113,24 @@ class BrowseFragment : Fragment() {
     private fun setupSortButtons() {
         binding.btnSortName.setOnClickListener { viewModel.setSortBy("name") }
         binding.btnSortArtist.setOnClickListener { viewModel.setSortBy("artist") }
-        binding.btnSortDate.setOnClickListener { viewModel.setSortBy("dateAdded") }
+        binding.btnSortDate.setOnClickListener { viewModel.setSortBy("addedon") }
+    }
+
+    private fun updateSortButtons(activeSortBy: String) {
+        val colorPrimary = MaterialColors.getColor(requireView(), com.google.android.material.R.attr.colorPrimary)
+        val colorOnPrimary = MaterialColors.getColor(requireView(), com.google.android.material.R.attr.colorOnPrimary)
+        val colorSurface = MaterialColors.getColor(requireView(), com.google.android.material.R.attr.colorSurface)
+
+        listOf(
+            binding.btnSortName to "name",
+            binding.btnSortArtist to "artist",
+            binding.btnSortDate to "addedon"
+        ).forEach { (btn, field) ->
+            val active = field == activeSortBy
+            btn.backgroundTintList = ColorStateList.valueOf(if (active) colorPrimary else colorSurface)
+            btn.setTextColor(if (active) colorOnPrimary else colorPrimary)
+            btn.strokeColor = ColorStateList.valueOf(colorPrimary)
+        }
     }
 
     private fun handleItemClick(item: AlbumOrTrackItem) {
@@ -155,6 +173,10 @@ class BrowseFragment : Fragment() {
 
         viewModel.title.observe(viewLifecycleOwner) { title ->
             activity?.title = title
+        }
+
+        viewModel.activeSortBy.observe(viewLifecycleOwner) { sortBy ->
+            updateSortButtons(sortBy)
         }
     }
 

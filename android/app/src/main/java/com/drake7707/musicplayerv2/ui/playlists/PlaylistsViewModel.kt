@@ -53,7 +53,7 @@ class PlaylistsViewModel(application: Application) : AndroidViewModel(applicatio
         }
         viewModelScope.launch {
             try {
-                val playlist = Playlist(id = "0", name = name, isCurrent = false, nrOfTracks = 0)
+                val playlist = Playlist(id = "", name = name, isCurrent = false, nrOfTracks = 0)
                 repository.addPlaylist(playlist)
                 _success.postValue("Playlist '$name' created")
                 loadPlaylists()
