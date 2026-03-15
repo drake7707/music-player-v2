@@ -32,7 +32,10 @@ class BrowseAdapter(
     inner class ViewHolder(private val binding: ItemBrowseBinding) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(item: AlbumOrTrackItem) {
-            binding.tvName.text = item.name
+            binding.tvName.text = if (!item.isTrack && item.name.isBlank())
+                binding.root.context.getString(R.string.untitled_album)
+            else
+                item.name
             binding.tvArtists.text = item.artists ?: ""
             binding.ivTypeIcon.setImageResource(
                 if (item.isTrack) R.drawable.ic_music_note else R.drawable.ic_album

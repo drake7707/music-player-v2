@@ -6,15 +6,18 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.drake7707.musicplayerv2.data.api.RetrofitClient
 import com.drake7707.musicplayerv2.databinding.FragmentSettingsBinding
+import com.drake7707.musicplayerv2.ui.SharedPlayerViewModel
 import kotlinx.coroutines.launch
 
 class SettingsFragment : Fragment() {
 
     private var _binding: FragmentSettingsBinding? = null
     private val binding get() = _binding!!
+    private val sharedViewModel: SharedPlayerViewModel by activityViewModels()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentSettingsBinding.inflate(inflater, container, false)
@@ -34,7 +37,9 @@ class SettingsFragment : Fragment() {
                 return@setOnClickListener
             }
             RetrofitClient.saveToPreferences(requireContext(), url)
-            Toast.makeText(requireContext(), "Server URL saved. Restart app to apply.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "Server URL saved", Toast.LENGTH_SHORT).show()
+            // Reload player state from the new URL without requiring an app restart
+            sharedViewModel.loadCurrentState()
         }
 
         binding.btnTestConnection.setOnClickListener {

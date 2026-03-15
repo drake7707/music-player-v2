@@ -48,9 +48,7 @@ class SharedPlayerViewModel(application: Application) : AndroidViewModel(applica
     private var isBound = false
     private var progressJob: Job? = null
 
-    private val repository: MusicRepository by lazy {
-        MusicRepository(RetrofitClient.getApiService())
-    }
+    private val repository get() = MusicRepository(RetrofitClient.getApiService())
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -153,6 +151,9 @@ class SharedPlayerViewModel(application: Application) : AndroidViewModel(applica
                 if (newState != null) {
                     service?.currentPlayerState?.let { svcState ->
                         if (svcState.currentTrack?.id == newState.currentTrack?.id) {
+                            // Same track — just update state without restarting the media item
+                            service?.updateStateOnly(newState)
+                        } else {
                             service?.loadPlayerState(newState, service!!.isPlaying)
                         }
                     }

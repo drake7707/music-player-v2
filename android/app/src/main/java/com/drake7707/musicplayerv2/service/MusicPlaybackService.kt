@@ -8,6 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Binder
 import android.os.IBinder
+import android.support.v4.media.MediaMetadataCompat
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
@@ -54,7 +57,10 @@ class MusicPlaybackService : LifecycleService() {
 
     private val binder = LocalBinder()
     private lateinit var exoPlayer: ExoPlayer
-    private var repository: MusicRepository? = null
+    private lateinit var mediaSession: MediaSessionCompat
+
+    // Always returns a fresh repository using the current base URL
+    private val repository get() = MusicRepository(RetrofitClient.getApiService())
 
     var currentPlayerState: PlayerState? = null
         private set
@@ -72,7 +78,9 @@ class MusicPlaybackService : LifecycleService() {
         createNotificationChannel()
         exoPlayer = ExoPlayer.Builder(this).build()
         exoPlayer.addListener(playerListener)
-        repository = MusicRepository(RetrofitClient.getApiService())
+        mediaSession = MediaSessionCompat(this, "MusicPlaybackService").apply {
+            isActive = true
+        }
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -114,21 +122,32 @@ class MusicPlaybackService : LifecycleService() {
 
         if (playWhenReady) {
             trackStartedPlayingMs = System.currentTimeMillis()
-            startForeground(NOTIFICATION_ID, buildNotification(track))
         }
+        // Always promote to foreground so background network calls (e.g. auto-advance) work
+        startForeground(NOTIFICATION_ID, buildNotification(track))
+        updateMediaSession()
+        notifyStateChanged()
+    }
+
+    // Update the player state without reloading/restarting the media item (e.g. after shuffle toggle)
+    fun updateStateOnly(state: PlayerState) {
+        currentPlayerState = state
+        updateMediaSession()
         notifyStateChanged()
     }
 
     fun resumePlayback() {
         exoPlayer.play()
         if (trackStartedPlayingMs == 0L) trackStartedPlayingMs = System.currentTimeMillis()
-        updateNotificationIfNeeded()
+        currentPlayerState?.currentTrack?.let { startForeground(NOTIFICATION_ID, buildNotification(it)) }
+        updateMediaSession()
         notifyStateChanged()
     }
 
     fun pausePlayback() {
         exoPlayer.pause()
         updateNotificationIfNeeded()
+        updateMediaSession()
         notifyStateChanged()
     }
 
@@ -146,7 +165,7 @@ class MusicPlaybackService : LifecycleService() {
 
         lifecycleScope.launch {
             try {
-                val newState = repository?.nextTrack(trackId, playedToEnd)
+                val newState = repository.nextTrack(trackId, playedToEnd)
                 if (newState != null) {
                     currentPlayerState = newState
                     loadPlayerState(newState, exoPlayer.isPlaying || playedToEnd)
@@ -165,7 +184,7 @@ class MusicPlaybackService : LifecycleService() {
 
         lifecycleScope.launch {
             try {
-                val newState = repository?.previousTrack(trackId)
+                val newState = repository.previousTrack(trackId)
                 if (newState != null) {
                     currentPlayerState = newState
                     loadPlayerState(newState, exoPlayer.isPlaying)
@@ -186,6 +205,7 @@ class MusicPlaybackService : LifecycleService() {
                     skipToNext(true)
                 }
                 Player.STATE_READY -> {
+                    updateMediaSession()
                     notifyStateChanged()
                 }
                 else -> {}
@@ -194,6 +214,7 @@ class MusicPlaybackService : LifecycleService() {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             updateNotificationIfNeeded()
+            updateMediaSession()
             notifyStateChanged()
         }
     }
@@ -211,6 +232,36 @@ class MusicPlaybackService : LifecycleService() {
         val notification = buildNotification(track)
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun updateMediaSession() {
+        val track = currentPlayerState?.currentTrack
+        if (track != null) {
+            mediaSession.setMetadata(
+                MediaMetadataCompat.Builder()
+                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
+                    .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.artists.joinToString(", "))
+                    .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, track.album)
+                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, exoPlayer.duration.coerceAtLeast(0L))
+                    .build()
+            )
+        }
+        val playbackState = PlaybackStateCompat.Builder()
+            .setActions(
+                PlaybackStateCompat.ACTION_PLAY or
+                PlaybackStateCompat.ACTION_PAUSE or
+                PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                PlaybackStateCompat.ACTION_SEEK_TO
+            )
+            .setState(
+                if (exoPlayer.isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED,
+                exoPlayer.currentPosition,
+                1.0f
+            )
+            .build()
+        mediaSession.setPlaybackState(playbackState)
     }
 
     private fun buildNotification(track: Track): Notification {
@@ -250,6 +301,7 @@ class MusicPlaybackService : LifecycleService() {
             )
             .setStyle(
                 androidx.media.app.NotificationCompat.MediaStyle()
+                    .setMediaSession(mediaSession.sessionToken)
                     .setShowActionsInCompactView(0, 1, 2)
             )
             .setOngoing(exoPlayer.isPlaying)
@@ -281,6 +333,7 @@ class MusicPlaybackService : LifecycleService() {
 
     override fun onDestroy() {
         progressUpdateJob?.cancel()
+        mediaSession.release()
         exoPlayer.release()
         super.onDestroy()
     }
