@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/playerFragment">
+
+    <fragment
+        android:id="@+id/playerFragment"
+        android:name="com.drake7707.musicplayerv2.ui.player.PlayerFragment"
+        android:label="@string/app_name"
+        tools:layout="@layout/fragment_player">
+
+        <action
+            android:id="@+id/action_playerFragment_to_browseFragment"
+            app:destination="@id/browseFragment" />
+        <action
+            android:id="@+id/action_playerFragment_to_playlistsFragment"
+            app:destination="@id/playlistsFragment" />
+        <action
+            android:id="@+id/action_playerFragment_to_trackDetailsFragment"
+            app:destination="@id/trackDetailsFragment" />
+        <action
+            android:id="@+id/action_playerFragment_to_settingsFragment"
+            app:destination="@id/settingsFragment" />
+        <action
+            android:id="@+id/action_playerFragment_to_addToPlaylistFragment"
+            app:destination="@id/addToPlaylistFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/browseFragment"
+        android:name="com.drake7707.musicplayerv2.ui.browse.BrowseFragment"
+        android:label="Browse"
+        tools:layout="@layout/fragment_browse">
+
+        <argument
+            android:name="albumId"
+            app:argType="string"
+            android:defaultValue="" />
+        <argument
+            android:name="playlistId"
+            app:argType="string"
+            android:defaultValue="" />
+        <argument
+            android:name="title"
+            app:argType="string"
+            android:defaultValue="Browse" />
+
+        <action
+            android:id="@+id/action_browseFragment_self"
+            app:destination="@id/browseFragment"
+            app:popUpTo="@id/browseFragment"
+            app:popUpToInclusive="false" />
+        <action
+            android:id="@+id/action_browseFragment_to_trackDetailsFragment"
+            app:destination="@id/trackDetailsFragment" />
+        <action
+            android:id="@+id/action_browseFragment_to_addToPlaylistFragment"
+            app:destination="@id/addToPlaylistFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/playlistsFragment"
+        android:name="com.drake7707.musicplayerv2.ui.playlists.PlaylistsFragment"
+        android:label="Playlists"
+        tools:layout="@layout/fragment_playlists">
+
+        <action
+            android:id="@+id/action_playlistsFragment_to_browseFragment"
+            app:destination="@id/browseFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/trackDetailsFragment"
+        android:name="com.drake7707.musicplayerv2.ui.details.TrackDetailsFragment"
+        android:label="Track Details"
+        tools:layout="@layout/fragment_track_details">
+
+        <argument
+            android:name="trackId"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.drake7707.musicplayerv2.ui.settings.SettingsFragment"
+        android:label="Settings"
+        tools:layout="@layout/fragment_settings" />
+
+    <fragment
+        android:id="@+id/addToPlaylistFragment"
+        android:name="com.drake7707.musicplayerv2.ui.addtoplaylist.AddToPlaylistFragment"
+        android:label="Add to Playlist"
+        tools:layout="@layout/fragment_add_to_playlist">
+
+        <argument
+            android:name="itemId"
+            app:argType="string" />
+        <argument
+            android:name="itemName"
+            app:argType="string" />
+        <argument
+            android:name="isTrack"
+            app:argType="boolean" />
+    </fragment>
+
+</navigation>

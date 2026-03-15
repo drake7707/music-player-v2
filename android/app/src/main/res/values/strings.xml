@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Music Player</string>
+    <string name="no_track_playing">No track playing</string>
+    <string name="previous">Previous</string>
+    <string name="play_pause">Play/Pause</string>
+    <string name="next">Next</string>
+    <string name="shuffle">Shuffle</string>
+    <string name="like">Like</string>
+    <string name="search">Search</string>
+    <string name="search_hint">Search albums or tracks…</string>
+    <string name="clear_search">Clear search</string>
+    <string name="no_items">No items found</string>
+    <string name="no_playlists">No playlists found</string>
+    <string name="load_more">Load more</string>
+    <string name="new_playlist">New playlist</string>
+    <string name="play_now">Play now</string>
+    <string name="play_next">Play next</string>
+    <string name="add_to_playlist">Add to playlist</string>
+    <string name="details">Details</string>
+    <string name="server_url_label">Server URL</string>
+    <string name="server_url_hint">e.g. http://192.168.1.100:5000</string>
+    <string name="server_url_description">Enter the URL of your music server (including port number)</string>
+    <string name="test_connection">Test Connection</string>
+    <string name="save_settings">Save</string>
+</resources>
