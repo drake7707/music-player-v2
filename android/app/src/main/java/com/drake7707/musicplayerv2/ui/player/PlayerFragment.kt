@@ -112,6 +112,10 @@ class PlayerFragment : Fragment() {
             sharedViewModel.setLikeStatus(track.id, newStatus)
         }
 
+        binding.swipeRefresh.setOnRefreshListener {
+            sharedViewModel.loadCurrentState()
+        }
+
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
@@ -163,6 +167,7 @@ class PlayerFragment : Fragment() {
 
         sharedViewModel.isLoading.observe(viewLifecycleOwner) { loading ->
             binding.progressLoading.visibility = if (loading) View.VISIBLE else View.GONE
+            if (!loading) binding.swipeRefresh.isRefreshing = false
         }
     }
 

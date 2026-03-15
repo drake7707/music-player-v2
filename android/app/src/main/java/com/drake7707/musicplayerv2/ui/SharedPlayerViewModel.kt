@@ -109,6 +109,7 @@ class SharedPlayerViewModel(application: Application) : AndroidViewModel(applica
 
     fun loadCurrentState() {
         viewModelScope.launch {
+            _isLoading.postValue(true)
             try {
                 val state = repository.getCurrentPlayerState()
                 _playerState.postValue(state)
@@ -122,6 +123,8 @@ class SharedPlayerViewModel(application: Application) : AndroidViewModel(applica
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading player state", e)
                 _errorMessage.postValue("Cannot connect to server. Please check settings.")
+            } finally {
+                _isLoading.postValue(false)
             }
         }
     }
