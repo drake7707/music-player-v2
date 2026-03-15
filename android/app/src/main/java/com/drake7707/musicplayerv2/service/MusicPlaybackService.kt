@@ -231,6 +231,15 @@ class MusicPlaybackService : LifecycleService() {
             updateNotificationIfNeeded()
             updateMediaSession()
             notifyStateChanged()
+            // Notify the backend so it updates scrobble status and current track
+            val trackId = currentPlayerState?.currentTrack?.id ?: return
+            lifecycleScope.launch {
+                try {
+                    repository.updatePlayerPlayingStatus(trackId, isPlaying)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to update playing status: ${e.message}")
+                }
+            }
         }
     }
 
