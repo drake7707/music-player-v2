@@ -114,10 +114,22 @@ class SharedPlayerViewModel(application: Application) : AndroidViewModel(applica
                 val state = repository.getCurrentPlayerState()
                 _playerState.postValue(state)
                 if (state?.currentTrack != null && service != null) {
-                    // Only load into player if service doesn't already have a track playing
                     val svc = service ?: return@launch
-                    if (svc.currentPlayerState == null) {
-                        svc.loadPlayerState(state, playWhenReady = false)
+                    val svcState = svc.currentPlayerState
+                    when {
+                        svcState == null -> {
+                            // Service has no track yet — load silently
+                            svc.loadPlayerState(state, playWhenReady = false)
+                        }
+                        svcState.currentTrack?.id != state.currentTrack?.id -> {
+                            // A different track is now current (e.g. changed from another client)
+                            // Reload the player but keep the current play/pause state
+                            svc.loadPlayerState(state, playWhenReady = svc.isPlaying)
+                        }
+                        else -> {
+                            // Same track — update metadata/shuffle/like state without restarting
+                            svc.updateStateOnly(state)
+                        }
                     }
                 }
             } catch (e: Exception) {
