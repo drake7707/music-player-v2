@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.drakarah.PiMusicPlayerTray</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>PiMusicPlayerTray</name>
+  <summary>Control MusicPlayerV2 from the system tray</summary>
+  <description>
+    <p>
+      PiMusicPlayerTray shows a system tray icon with the currently playing
+      track from a MusicPlayerV2 instance, and registers global keyboard
+      shortcuts to play/pause, stop, skip, and change the volume without
+      having to switch to the browser tab. This is the Linux counterpart of
+      the original Windows PiMusicPlayerTray application.
+    </p>
+  </description>
+  <launchable type="desktop-id">org.drakarah.PiMusicPlayerTray.desktop</launchable>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Player</category>
+  </categories>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="1.0.0" date="2026-09-05">
+      <description>
+        <p>Initial Linux release of PiMusicPlayerTray, packaged as a Flatpak.</p>
+      </description>
+    </release>
+  </releases>
+</component>

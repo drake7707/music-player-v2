@@ -30,7 +30,7 @@ from gi.repository import Gdk, GLib, Gtk, WebKit2
 from pynput import keyboard
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.ini")
+APP_ID = "org.drakarah.PiMusicPlayerTray"
 
 # Same set of hotkeys/actions as the Windows PiMusicPlayerTray application.
 HOTKEY_NAMES = [
@@ -67,9 +67,35 @@ LEGACY_API_FUNCTIONS = {
 }
 
 
+def _default_config_path():
+    """Locate the bundled config.ini with the built-in default settings.
+
+    When run from a checkout it sits next to this script; when installed
+    (e.g. via the Flatpak) it is shipped as a read-only data file instead.
+    """
+    local = os.path.join(SCRIPT_DIR, "config.ini")
+    if os.path.exists(local):
+        return local
+
+    for data_dir in GLib.get_system_data_dirs():
+        candidate = os.path.join(data_dir, "pimusicplayertray", "config.ini")
+        if os.path.exists(candidate):
+            return candidate
+
+    return local
+
+
+def _user_config_path():
+    """Per-user, writable config.ini used to override the bundled defaults."""
+    return os.path.join(GLib.get_user_config_dir(), "pimusicplayertray", "config.ini")
+
+
 def load_config():
     parser = configparser.ConfigParser()
-    parser.read(CONFIG_FILE)
+    # Values from the user config (if present) take precedence over the
+    # bundled defaults, so users only need to set the keys they want to
+    # change (e.g. just PlayerUrl or a single hotkey).
+    parser.read([_default_config_path(), _user_config_path()])
     general = parser["General"] if parser.has_section("General") else {}
     hotkeys = parser["Hotkeys"] if parser.has_section("Hotkeys") else {}
     return general, hotkeys
@@ -132,7 +158,6 @@ class PiMusicPlayerTray:
         self.window.set_skip_taskbar_hint(True)
         self.window.set_skip_pager_hint(True)
         self.window.connect("delete-event", self._on_window_close)
-
         self.webview = WebKit2.WebView()
         self.webview.connect("load-changed", self._on_load_changed)
         self.webview.load_uri(self.player_url)
@@ -141,10 +166,7 @@ class PiMusicPlayerTray:
         self.is_loaded = False
 
     def _build_indicator(self):
-        # AppIndicator expects an icon theme name or a path to a standard
-        # image format (PNG/SVG); .ico files are not reliably supported.
-        icon_path = os.path.join(SCRIPT_DIR, "playericon_2.png")
-        icon = icon_path if os.path.exists(icon_path) else "multimedia-player"
+        icon = self._resolve_icon()
 
         self.indicator = AppIndicator3.Indicator.new(
             "pimusicplayertray",
@@ -171,6 +193,27 @@ class PiMusicPlayerTray:
 
         menu.show_all()
         self.indicator.set_menu(menu)
+
+    def _resolve_icon(self):
+        # AppIndicator expects an icon theme name or a path to a standard
+        # image format (PNG/SVG); .ico files are not reliably supported.
+        # Prefer the icon installed into the icon theme (e.g. by the
+        # Flatpak/package), falling back to the bundled PNG shipped next to
+        # this script or as a data file when running from an installed
+        # (e.g. Flatpak) location.
+        theme = Gtk.IconTheme.get_default()
+        if theme is not None and theme.has_icon(APP_ID):
+            return APP_ID
+
+        candidates = [os.path.join(SCRIPT_DIR, "playericon_2.png")]
+        for data_dir in GLib.get_system_data_dirs():
+            candidates.append(os.path.join(data_dir, "pimusicplayertray", "playericon_2.png"))
+
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                return candidate
+
+        return "multimedia-player"
 
     # ------------------------------------------------------------------
     # Hotkeys
@@ -359,6 +402,7 @@ class PiMusicPlayerTray:
 
 
 def main():
+    Gtk.Window.set_default_icon_name(APP_ID)
     PiMusicPlayerTray()
     Gtk.main()
 
