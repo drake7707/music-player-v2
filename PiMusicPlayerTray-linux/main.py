@@ -190,6 +190,14 @@ class PiMusicPlayerTray:
                 )
                 continue
 
+            if combo in combos:
+                print(
+                    "Hotkey %s (%s) conflicts with another hotkey using the "
+                    "same combo; only the first one will be used." % (name, value),
+                    file=sys.stderr,
+                )
+                continue
+
             def make_callback(hotkey_name):
                 return lambda: GLib.idle_add(self._on_hotkey, hotkey_name)
 
@@ -238,7 +246,9 @@ class PiMusicPlayerTray:
     # Info polling (tray tooltip / title)
     # ------------------------------------------------------------------
     def _on_load_changed(self, webview, load_event):
-        if load_event == WebKit2.LoadEvent.FINISHED:
+        if load_event == WebKit2.LoadEvent.STARTED:
+            self.is_loaded = False
+        elif load_event == WebKit2.LoadEvent.FINISHED:
             self.is_loaded = True
 
     def _on_update_info_tick(self):
