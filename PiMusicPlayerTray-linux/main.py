@@ -224,7 +224,10 @@ class PiMusicPlayerTray:
     def _api_call(self, action):
         if self.api_version == "2":
             return "API.%s()" % action
-        return "%s()" % LEGACY_API_FUNCTIONS[action]
+        legacy_name = LEGACY_API_FUNCTIONS.get(action)
+        if legacy_name is None:
+            raise ValueError("No legacy API mapping for action %r" % action)
+        return "%s()" % legacy_name
 
     def _run_js(self, script):
         if not self.is_loaded:
