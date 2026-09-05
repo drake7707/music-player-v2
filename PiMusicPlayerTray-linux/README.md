@@ -27,6 +27,13 @@ control playback without switching to the browser.
 > most Wayland sessions running under XWayland, but pure-Wayland compositors
 > without XWayland support may not deliver global hotkeys.
 
+## Installing via Flatpak
+
+The easiest way to run PiMusicPlayerTray on any Linux distribution — without
+manually installing GTK/WebKit/AppIndicator packages — is via the Flatpak
+packaging in [`../flatpak`](../flatpak). See that directory's `README.md` for
+build/install instructions.
+
 ## Dependencies
 
 System packages (Debian/Ubuntu names, adjust for your distro):
