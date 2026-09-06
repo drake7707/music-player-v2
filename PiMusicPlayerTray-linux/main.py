@@ -164,7 +164,8 @@ def to_portal_trigger(value):
         raise ValueError("hotkey %r has no non-modifier key" % value)
 
     if len(key) == 1:
-        key_name = key
+        key_name = key  # single-char keys are lowercase, per GTK accelerator
+        # syntax convention (e.g. Gtk.accelerator_parse("<Control>k")).
     elif key[0] == "f" and key[1:].isdigit():
         key_name = key.upper()  # f5 -> F5
     else:
@@ -240,10 +241,24 @@ class PortalGlobalShortcuts:
         self._counter += 1
         return "%s_%d_%d" % (prefix, os.getpid(), self._counter)
 
+    # Response codes used by portal Request objects, per the xdg-desktop-
+    # portal spec: 0 = success, 1 = user cancelled, 2 = other error/ended.
+    RESPONSE_CODE_DESCRIPTIONS = {
+        0: "success",
+        1: "cancelled by the user",
+        2: "ended/other error",
+    }
+
     def _call_portal(self, method, extra_sig, extra_args):
         """Call a Request-based portal method and block (via a nested
         GLib main loop) until its Response signal arrives, returning the
-        response's results dict. Raises RuntimeError on error/timeout."""
+        response's results dict. Raises RuntimeError on error/timeout.
+
+        Note: this is only safe to call while no other GLib main loop
+        iteration is running higher up the call stack (e.g. during
+        __init__, before Gtk.main() has started) since it spins up its
+        own nested GLib.MainLoop to wait for the asynchronous response.
+        """
         token = self._next_token(method.lower())
         request_path = "/org/freedesktop/portal/desktop/request/%s/%s" % (
             self._sender, token,
@@ -294,10 +309,12 @@ class PortalGlobalShortcuts:
 
             if timed_out:
                 raise RuntimeError("portal %s timed out" % method)
-            if result.get("code") != 0:
+            code = result.get("code")
+            if code != 0:
+                description = self.RESPONSE_CODE_DESCRIPTIONS.get(code, "unknown")
                 raise RuntimeError(
-                    "portal %s failed (response code %s)"
-                    % (method, result.get("code"))
+                    "portal %s failed (response code %s: %s)"
+                    % (method, code, description)
                 )
             return result["results"]
         finally:
