@@ -25,7 +25,11 @@ control playback without switching to the browser.
 > **Note:** Global hotkeys are implemented with `pynput`, which uses X11 to
 > listen for key presses. This works out of the box on X11 sessions and on
 > most Wayland sessions running under XWayland, but pure-Wayland compositors
-> without XWayland support may not deliver global hotkeys.
+> without XWayland support may not deliver global hotkeys. If `pynput` can't
+> reach an X server at all (no XWayland, or the X11 socket isn't available,
+> e.g. inside the Flatpak sandbox), the application still starts normally
+> with the tray icon and popup — a warning is printed to stderr and global
+> hotkeys are simply disabled instead of crashing on startup.
 
 ## Installing via Flatpak
 

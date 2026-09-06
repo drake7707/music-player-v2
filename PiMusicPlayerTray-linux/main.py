@@ -27,7 +27,19 @@ except (ValueError, ImportError):
 
 from gi.repository import Gdk, GLib, Gtk, WebKit2
 
-from pynput import keyboard
+try:
+    # On pure-Wayland sessions without XWayland (or with XWayland but no
+    # DISPLAY reachable, e.g. inside a Flatpak sandbox missing the X11
+    # socket), pynput's Linux backend can raise as soon as it is imported
+    # because it tries to connect to an X server. Import it defensively so
+    # the whole application doesn't crash on startup; global hotkeys are
+    # simply disabled in that case (see _register_hotkeys()).
+    from pynput import keyboard
+except Exception as _pynput_import_error:  # noqa: N816 - module-level flag
+    keyboard = None
+    PYNPUT_IMPORT_ERROR = _pynput_import_error
+else:
+    PYNPUT_IMPORT_ERROR = None
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_ID = "org.drakarah.PiMusicPlayerTray"
@@ -219,6 +231,15 @@ class PiMusicPlayerTray:
     # Hotkeys
     # ------------------------------------------------------------------
     def _register_hotkeys(self):
+        if keyboard is None:
+            print(
+                "Global hotkeys disabled: pynput could not be initialized "
+                "(%s). This typically happens on pure-Wayland sessions "
+                "without XWayland." % (PYNPUT_IMPORT_ERROR,),
+                file=sys.stderr,
+            )
+            return
+
         combos = {}
         for name in HOTKEY_NAMES:
             value = self.hotkeys_cfg.get(name)
@@ -246,8 +267,18 @@ class PiMusicPlayerTray:
 
             combos[combo] = make_callback(name)
 
-        self.hotkey_listener = keyboard.GlobalHotKeys(combos)
-        self.hotkey_listener.start()
+        try:
+            self.hotkey_listener = keyboard.GlobalHotKeys(combos)
+            self.hotkey_listener.start()
+        except Exception as ex:
+            self.hotkey_listener = None
+            print(
+                "Global hotkeys disabled: failed to start the listener "
+                "(%s). This typically happens when no X server is "
+                "reachable (e.g. a pure-Wayland session without "
+                "XWayland)." % (ex,),
+                file=sys.stderr,
+            )
 
     def _on_hotkey(self, name):
         self._reset_wait_timeout_if_active()
