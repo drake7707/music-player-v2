@@ -22,10 +22,21 @@ control playback without switching to the browser.
 - Same `Version` setting as the Windows app to switch between the `API.*`
   JavaScript interface (`Version = 2`) and the legacy `player*` functions.
 
-> **Note:** Global hotkeys are implemented with `pynput`, which uses X11 to
-> listen for key presses. This works out of the box on X11 sessions and on
-> most Wayland sessions running under XWayland, but pure-Wayland compositors
-> without XWayland support may not deliver global hotkeys.
+> **Note:** Global hotkeys are registered through the
+> [`org.freedesktop.portal.GlobalShortcuts`](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.GlobalShortcuts.html)
+> desktop portal, which is the native, sandbox-friendly way to get global
+> hotkeys on Wayland (compositors don't let arbitrary clients grab keys
+> directly the way X11 does). This requires an `xdg-desktop-portal` backend
+> that implements the interface, e.g. `xdg-desktop-portal-gnome` (GNOME 45+),
+> `xdg-desktop-portal-kde`, or `xdg-desktop-portal-wlr` with it enabled; on
+> first use the desktop may prompt you to confirm/assign the shortcuts. If
+> that portal interface isn't available, the app automatically falls back to
+> `pynput`, which listens for key presses via X11 directly — this works on
+> X11 sessions and on Wayland sessions running under XWayland. If neither
+> backend can be initialized (e.g. no portal support and no X server
+> reachable at all), the application still starts normally with the tray
+> icon and popup; a warning is printed to stderr and global hotkeys are
+> simply disabled instead of crashing on startup.
 
 ## Installing via Flatpak
 

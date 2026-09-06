@@ -25,9 +25,21 @@ except (ValueError, ImportError):
     gi.require_version("AppIndicator3", "0.1")
     from gi.repository import AppIndicator3
 
-from gi.repository import Gdk, GLib, Gtk, WebKit2
+from gi.repository import Gdk, Gio, GLib, Gtk, WebKit2
 
-from pynput import keyboard
+try:
+    # On pure-Wayland sessions without XWayland (or with XWayland but no
+    # DISPLAY reachable, e.g. inside a Flatpak sandbox missing the X11
+    # socket), pynput's Linux backend can raise as soon as it is imported
+    # because it tries to connect to an X server. Import it defensively so
+    # the whole application doesn't crash on startup; global hotkeys are
+    # simply disabled in that case (see _register_hotkeys()).
+    from pynput import keyboard
+except Exception as _pynput_import_error:
+    keyboard = None
+    PYNPUT_IMPORT_ERROR = _pynput_import_error
+else:
+    PYNPUT_IMPORT_ERROR = None
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_ID = "org.drakarah.PiMusicPlayerTray"
@@ -117,6 +129,227 @@ def to_pynput_combo(value):
             # Named keys such as function keys (f5), space, tab, etc.
             converted.append("<%s>" % part)
     return "+".join(converted)
+
+
+# Maps the friendly modifier names used in config.ini to the GTK/portal
+# accelerator syntax (e.g. "<Control><Alt>k") used as the "preferred_trigger"
+# hint for the org.freedesktop.portal.GlobalShortcuts interface.
+PORTAL_MODIFIER_MAP = {
+    "ctrl": "<Control>",
+    "control": "<Control>",
+    "alt": "<Alt>",
+    "shift": "<Shift>",
+    "win": "<Super>",
+    "super": "<Super>",
+    "cmd": "<Super>",
+}
+
+
+def to_portal_trigger(value):
+    """Convert a 'ctrl+alt+k' style combo into a GTK accelerator string
+    such as '<Control><Alt>k', used as the preferred_trigger hint when
+    binding shortcuts through the desktop portal."""
+    parts = [p.strip().lower() for p in value.split("+") if p.strip()]
+    if not parts:
+        raise ValueError("empty hotkey definition")
+
+    mods = []
+    key = None
+    for part in parts:
+        if part in PORTAL_MODIFIER_MAP:
+            mods.append(PORTAL_MODIFIER_MAP[part])
+        elif key is not None:
+            raise ValueError(
+                "hotkey %r has more than one non-modifier key" % value
+            )
+        else:
+            key = part
+    if key is None:
+        raise ValueError("hotkey %r has no non-modifier key" % value)
+
+    if len(key) == 1:
+        key_name = key  # single-char keys are lowercase, per GTK accelerator
+        # syntax convention (e.g. Gtk.accelerator_parse("<Control>k")).
+    elif key[0] == "f" and key[1:].isdigit():
+        key_name = key.upper()  # f5 -> F5
+    else:
+        key_name = key.capitalize()  # space -> Space, tab -> Tab, ...
+
+    return "".join(mods) + key_name
+
+
+class PortalGlobalShortcuts:
+    """Global hotkeys via the xdg-desktop-portal GlobalShortcuts interface.
+
+    Unlike X11, Wayland compositors don't let arbitrary clients grab
+    keyboard shortcuts directly, so sandboxed (Flatpak) apps are expected
+    to use this portal instead of talking to the display server. It also
+    works on X11 sessions where the portal implementation supports it.
+    Requires an xdg-desktop-portal backend that implements
+    org.freedesktop.portal.GlobalShortcuts (e.g. xdg-desktop-portal-gnome
+    >= 45, xdg-desktop-portal-kde, or xdg-desktop-portal-wlr with support
+    enabled); otherwise CreateSession/BindShortcuts will raise and the
+    caller should fall back to another backend.
+    """
+
+    BUS_NAME = "org.freedesktop.portal.Desktop"
+    OBJECT_PATH = "/org/freedesktop/portal/desktop"
+    IFACE = "org.freedesktop.portal.GlobalShortcuts"
+    REQUEST_IFACE = "org.freedesktop.portal.Request"
+    CALL_TIMEOUT_SECONDS = 10
+
+    def __init__(self, shortcuts, on_activated):
+        """shortcuts: iterable of (id, description, preferred_trigger).
+        on_activated: callback invoked with the shortcut id when triggered.
+        Raises on any failure (portal unavailable, interface missing,
+        request denied, timeout, ...); the caller is expected to catch
+        this and fall back to another hotkey backend.
+        """
+        self._on_activated = on_activated
+        self._counter = 0
+        self._session_handle = None
+
+        self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        self._sender = self.bus.get_unique_name()[1:].replace(".", "_")
+
+        self._activated_sub = self.bus.signal_subscribe(
+            self.BUS_NAME, self.IFACE, "Activated", self.OBJECT_PATH,
+            None, Gio.DBusSignalFlags.NONE, self._on_activated_signal,
+        )
+
+        try:
+            create_results = self._call_portal(
+                "CreateSession",
+                "(a{sv})",
+                {"session_handle_token": GLib.Variant("s", self._next_token("session"))},
+            )
+            self._session_handle = create_results["session_handle"]
+
+            shortcut_specs = []
+            for shortcut_id, description, preferred_trigger in shortcuts:
+                options = {"description": GLib.Variant("s", description)}
+                if preferred_trigger:
+                    options["preferred_trigger"] = GLib.Variant("s", preferred_trigger)
+                shortcut_specs.append((shortcut_id, options))
+
+            self._call_portal(
+                "BindShortcuts",
+                "(oa(sa{sv})sa{sv})",
+                (self._session_handle, shortcut_specs, "", {}),
+            )
+        except Exception:
+            self.stop()
+            raise
+
+    def _next_token(self, prefix):
+        self._counter += 1
+        return "%s_%d_%d" % (prefix, os.getpid(), self._counter)
+
+    # Response codes used by portal Request objects, per the xdg-desktop-
+    # portal spec: 0 = success, 1 = user cancelled, 2 = other error/ended.
+    RESPONSE_CODE_DESCRIPTIONS = {
+        0: "success",
+        1: "cancelled by the user",
+        2: "ended/other error",
+    }
+
+    def _call_portal(self, method, extra_sig, extra_args):
+        """Call a Request-based portal method and block (via a nested
+        GLib main loop) until its Response signal arrives, returning the
+        response's results dict. Raises RuntimeError on error/timeout.
+
+        Note: this is only safe to call while no other GLib main loop
+        iteration is running higher up the call stack (e.g. during
+        __init__, before Gtk.main() has started) since it spins up its
+        own nested GLib.MainLoop to wait for the asynchronous response.
+        """
+        token = self._next_token(method.lower())
+        request_path = "/org/freedesktop/portal/desktop/request/%s/%s" % (
+            self._sender, token,
+        )
+
+        result = {}
+        loop = GLib.MainLoop()
+
+        def on_response(_conn, _sender, _path, _iface, _signal, params):
+            code, results = params.unpack()
+            result["code"] = code
+            result["results"] = results
+            loop.quit()
+
+        sub_id = self.bus.signal_subscribe(
+            self.BUS_NAME, self.REQUEST_IFACE, "Response", request_path,
+            None, Gio.DBusSignalFlags.NONE, on_response,
+        )
+
+        try:
+            if isinstance(extra_args, dict):
+                options = dict(extra_args)
+                options["handle_token"] = GLib.Variant("s", token)
+                args = (options,)
+            else:
+                # Contract: when extra_args isn't itself the options dict,
+                # it must be a tuple whose last element is the a{sv}
+                # options dict expected by the portal method's signature
+                # (see the CreateSession/BindShortcuts call sites below).
+                if not isinstance(extra_args[-1], dict):
+                    raise TypeError("extra_args must end with an options dict")
+                options = dict(extra_args[-1])
+                options["handle_token"] = GLib.Variant("s", token)
+                args = tuple(extra_args[:-1]) + (options,)
+
+            self.bus.call_sync(
+                self.BUS_NAME, self.OBJECT_PATH, self.IFACE, method,
+                GLib.Variant(extra_sig, args), None,
+                Gio.DBusCallFlags.NONE, -1, None,
+            )
+
+            timed_out = {"flag": False}
+
+            def on_timeout():
+                timed_out["flag"] = True
+                loop.quit()
+                return False
+
+            timeout_id = GLib.timeout_add_seconds(
+                self.CALL_TIMEOUT_SECONDS, on_timeout,
+            )
+            loop.run()
+            GLib.source_remove(timeout_id)
+
+            if timed_out["flag"]:
+                raise RuntimeError("portal %s timed out" % method)
+            code = result.get("code")
+            if code != 0:
+                description = self.RESPONSE_CODE_DESCRIPTIONS.get(code, "unknown")
+                raise RuntimeError(
+                    "portal %s failed (response code %s: %s)"
+                    % (method, code, description)
+                )
+            return result["results"]
+        finally:
+            self.bus.signal_unsubscribe(sub_id)
+
+    def _on_activated_signal(self, _conn, _sender, _path, _iface, _signal, params):
+        session_handle, shortcut_id = params.unpack()[:2]
+        if session_handle != self._session_handle:
+            return
+        self._on_activated(shortcut_id)
+
+    def stop(self):
+        if getattr(self, "_activated_sub", None):
+            self.bus.signal_unsubscribe(self._activated_sub)
+            self._activated_sub = None
+        if self._session_handle:
+            try:
+                self.bus.call_sync(
+                    self.BUS_NAME, self._session_handle,
+                    "org.freedesktop.portal.Session", "Close",
+                    None, None, Gio.DBusCallFlags.NONE, -1, None,
+                )
+            except Exception:
+                pass
+            self._session_handle = None
 
 
 class PiMusicPlayerTray:
@@ -219,11 +452,72 @@ class PiMusicPlayerTray:
     # Hotkeys
     # ------------------------------------------------------------------
     def _register_hotkeys(self):
-        combos = {}
+        entries = []  # [(name, value), ...]
         for name in HOTKEY_NAMES:
             value = self.hotkeys_cfg.get(name)
-            if not value:
+            if value:
+                entries.append((name, value))
+
+        if self._register_hotkeys_via_portal(entries):
+            return
+        self._register_hotkeys_via_pynput(entries)
+
+    def _register_hotkeys_via_portal(self, entries):
+        """Try registering global hotkeys through the xdg-desktop-portal
+        GlobalShortcuts interface. This is the native, sandbox-friendly
+        way to get global hotkeys on Wayland (and works on X11 too, when
+        the portal backend supports it), so it's tried first. Returns True
+        if registration succeeded, False if the caller should fall back to
+        another backend (e.g. the portal or its GlobalShortcuts interface
+        isn't available)."""
+        shortcuts = []
+        for name, value in entries:
+            try:
+                trigger = to_portal_trigger(value)
+            except Exception as ex:
+                print(
+                    "Unable to register hotkey %s (%s): %s" % (name, value, ex),
+                    file=sys.stderr,
+                )
                 continue
+            shortcuts.append((name, name, trigger))
+
+        if not shortcuts:
+            return False
+
+        try:
+            self.hotkey_listener = PortalGlobalShortcuts(
+                shortcuts, lambda name: GLib.idle_add(self._on_hotkey, name),
+            )
+        except Exception as ex:
+            print(
+                "Global hotkeys via the desktop portal are unavailable "
+                "(%s); trying pynput instead." % (ex,),
+                file=sys.stderr,
+            )
+            self.hotkey_listener = None
+            return False
+
+        print("Global hotkeys registered via the desktop portal.", file=sys.stderr)
+        return True
+
+    def _register_hotkeys_via_pynput(self, entries):
+        """Fallback hotkey backend using pynput, which listens for key
+        presses directly via X11. Works on X11 sessions and on Wayland
+        sessions running under XWayland, but not on pure-Wayland sessions
+        without XWayland, nor when the portal-based backend above isn't
+        supported by the compositor."""
+        if keyboard is None:
+            print(
+                "Global hotkeys disabled: pynput could not be initialized "
+                "(%s). This typically happens on pure-Wayland sessions "
+                "without XWayland." % (PYNPUT_IMPORT_ERROR,),
+                file=sys.stderr,
+            )
+            return
+
+        combos = {}
+        for name, value in entries:
             try:
                 combo = to_pynput_combo(value)
             except Exception as ex:
@@ -246,8 +540,20 @@ class PiMusicPlayerTray:
 
             combos[combo] = make_callback(name)
 
-        self.hotkey_listener = keyboard.GlobalHotKeys(combos)
-        self.hotkey_listener.start()
+        try:
+            self.hotkey_listener = keyboard.GlobalHotKeys(combos)
+            self.hotkey_listener.start()
+        except Exception as ex:
+            self.hotkey_listener = None
+            print(
+                "Global hotkeys disabled: failed to start the pynput "
+                "listener (%s). This typically happens when no X server "
+                "is reachable (e.g. a pure-Wayland session without "
+                "XWayland)." % (ex,),
+                file=sys.stderr,
+            )
+        else:
+            print("Global hotkeys registered via pynput (X11).", file=sys.stderr)
 
     def _on_hotkey(self, name):
         self._reset_wait_timeout_if_active()
