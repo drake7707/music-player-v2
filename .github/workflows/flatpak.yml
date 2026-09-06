@@ -1,0 +1,33 @@
+name: Flatpak
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'flatpak/**'
+      - 'PiMusicPlayerTray-linux/**'
+      - '.github/workflows/flatpak.yml'
+  pull_request:
+    paths:
+      - 'flatpak/**'
+      - 'PiMusicPlayerTray-linux/**'
+      - '.github/workflows/flatpak.yml'
+  workflow_dispatch:
+
+jobs:
+  flatpak:
+    name: Build Flatpak
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: PiMusicPlayerTray.flatpak
+          manifest-path: flatpak/org.drakarah.PiMusicPlayerTray.yml
+          cache-key: flatpak-builder-${{ github.sha }}

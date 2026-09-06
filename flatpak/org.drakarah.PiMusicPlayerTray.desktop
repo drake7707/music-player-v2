@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=PiMusicPlayerTray
+Comment=Control MusicPlayerV2 from the system tray with global hotkeys
+Exec=pimusicplayertray
+Icon=org.drakarah.PiMusicPlayerTray
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Player;
+StartupNotify=false
+NoDisplay=false

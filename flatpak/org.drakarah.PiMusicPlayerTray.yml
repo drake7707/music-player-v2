@@ -1,0 +1,42 @@
+app-id: org.drakarah.PiMusicPlayerTray
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
+command: pimusicplayertray
+
+finish-args:
+  # Show the popup window and let WebKitGTK render it.
+  - --socket=wayland
+  - --socket=fallback-x11
+  # pynput's Linux backend talks to the X server directly to register
+  # global hotkeys; this only works when an X11 (or XWayland) socket is
+  # available, so also request the plain x11 socket in addition to the
+  # Wayland/fallback-x11 ones above.
+  - --socket=x11
+  - --share=ipc
+  # The player web page is normally served from localhost by MusicPlayerV2.
+  - --share=network
+  # AppIndicator registers itself as a StatusNotifierItem on the session bus.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.StatusNotifierItem-*
+
+modules:
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+  - python3-pynput.json
+
+  - name: pimusicplayertray
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 main.py /app/bin/pimusicplayertray
+      - install -Dm644 config.ini /app/share/pimusicplayertray/config.ini
+      - install -Dm644 playericon_2.png /app/share/pimusicplayertray/playericon_2.png
+      - install -Dm644 playericon_2.png /app/share/icons/hicolor/128x128/apps/org.drakarah.PiMusicPlayerTray.png
+      - install -Dm644 org.drakarah.PiMusicPlayerTray.desktop /app/share/applications/org.drakarah.PiMusicPlayerTray.desktop
+      - install -Dm644 org.drakarah.PiMusicPlayerTray.metainfo.xml /app/share/metainfo/org.drakarah.PiMusicPlayerTray.metainfo.xml
+    sources:
+      - type: dir
+        path: ../PiMusicPlayerTray-linux
+      - type: file
+        path: org.drakarah.PiMusicPlayerTray.desktop
+      - type: file
+        path: org.drakarah.PiMusicPlayerTray.metainfo.xml
