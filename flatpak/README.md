@@ -4,6 +4,17 @@ This directory contains everything needed to build PiMusicPlayerTray-linux
 as a Flatpak, so it can run on any Linux distribution without manually
 installing GTK/WebKit/AppIndicator system packages.
 
+## Installing the latest build
+
+Download `PiMusicPlayerTray.flatpak` from the repository's
+[latest release](https://github.com/drakarah/music-player-v2/releases/latest),
+then install and run it:
+
+```bash
+flatpak install --user PiMusicPlayerTray.flatpak
+flatpak run org.drakarah.PiMusicPlayerTray
+```
+
 ## Files
 
 - `org.drakarah.PiMusicPlayerTray.yml` — the Flatpak manifest.
