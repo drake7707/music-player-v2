@@ -158,6 +158,10 @@ def to_portal_trigger(value):
     for part in parts:
         if part in PORTAL_MODIFIER_MAP:
             mods.append(PORTAL_MODIFIER_MAP[part])
+        elif key is not None:
+            raise ValueError(
+                "hotkey %r has more than one non-modifier key" % value
+            )
         else:
             key = part
     if key is None:
@@ -288,9 +292,8 @@ class PortalGlobalShortcuts:
                 # it must be a tuple whose last element is the a{sv}
                 # options dict expected by the portal method's signature
                 # (see the CreateSession/BindShortcuts call sites below).
-                assert isinstance(extra_args[-1], dict), (
-                    "extra_args must end with an options dict"
-                )
+                if not isinstance(extra_args[-1], dict):
+                    raise TypeError("extra_args must end with an options dict")
                 options = dict(extra_args[-1])
                 options["handle_token"] = GLib.Variant("s", token)
                 args = tuple(extra_args[:-1]) + (options,)
