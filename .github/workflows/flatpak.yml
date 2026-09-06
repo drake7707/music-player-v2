@@ -19,7 +19,7 @@ jobs:
     name: Build Flatpak
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
       options: --privileged
@@ -31,3 +31,14 @@ jobs:
           bundle: PiMusicPlayerTray.flatpak
           manifest-path: flatpak/org.drakarah.PiMusicPlayerTray.yml
           cache-key: flatpak-builder-${{ github.sha }}
+
+      - name: Publish latest Flatpak release
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: softprops/action-gh-release@v2.0.7
+        with:
+          tag_name: latest
+          name: Latest Flatpak build
+          target_commitish: ${{ github.sha }}
+          body: Latest successful Flatpak build from the default branch.
+          make_latest: true
+          files: PiMusicPlayerTray.flatpak
