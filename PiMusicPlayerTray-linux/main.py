@@ -35,7 +35,7 @@ try:
     # the whole application doesn't crash on startup; global hotkeys are
     # simply disabled in that case (see _register_hotkeys()).
     from pynput import keyboard
-except Exception as _pynput_import_error:  # noqa: N816 - module-level flag
+except Exception as _pynput_import_error:
     keyboard = None
     PYNPUT_IMPORT_ERROR = _pynput_import_error
 else:
@@ -284,6 +284,13 @@ class PortalGlobalShortcuts:
                 options["handle_token"] = GLib.Variant("s", token)
                 args = (options,)
             else:
+                # Contract: when extra_args isn't itself the options dict,
+                # it must be a tuple whose last element is the a{sv}
+                # options dict expected by the portal method's signature
+                # (see the CreateSession/BindShortcuts call sites below).
+                assert isinstance(extra_args[-1], dict), (
+                    "extra_args must end with an options dict"
+                )
                 options = dict(extra_args[-1])
                 options["handle_token"] = GLib.Variant("s", token)
                 args = tuple(extra_args[:-1]) + (options,)
@@ -294,10 +301,10 @@ class PortalGlobalShortcuts:
                 Gio.DBusCallFlags.NONE, -1, None,
             )
 
-            timed_out = []
+            timed_out = {"flag": False}
 
             def on_timeout():
-                timed_out.append(True)
+                timed_out["flag"] = True
                 loop.quit()
                 return False
 
@@ -307,7 +314,7 @@ class PortalGlobalShortcuts:
             loop.run()
             GLib.source_remove(timeout_id)
 
-            if timed_out:
+            if timed_out["flag"]:
                 raise RuntimeError("portal %s timed out" % method)
             code = result.get("code")
             if code != 0:
