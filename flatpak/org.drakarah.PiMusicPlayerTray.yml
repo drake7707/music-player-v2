@@ -18,11 +18,14 @@ finish-args:
   - --share=network
   # AppIndicator registers itself as a StatusNotifierItem on the session bus.
   # Flatpak's finish-args validation rejects wildcarded D-Bus names, so we
-  # grant the concrete name the app will use: inside its own sandboxed pid
-  # namespace the app is always pid 2, and it's the first item it registers,
-  # so the resulting bus name is always org.kde.StatusNotifierItem-2-1.
+  # grant the concrete names the app will use: inside its own sandboxed pid
+  # namespace the app is always pid 2, so the resulting bus name is always
+  # org.kde.StatusNotifierItem-2-<n>. A couple of trailing indices are
+  # granted in case the item has to be re-registered (e.g. after a bus name
+  # conflict) and the registration counter is bumped.
   - --talk-name=org.kde.StatusNotifierWatcher
   - --own-name=org.kde.StatusNotifierItem-2-1
+  - --own-name=org.kde.StatusNotifierItem-2-2
 
 modules:
   - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
